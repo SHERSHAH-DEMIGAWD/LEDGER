@@ -1,0 +1,181 @@
+/**
+ * Ledger Design Tokens
+ *
+ * The visual language is intentionally calm, precise, and premium.
+ * Avoid loud colors, harsh gradients, or unnecessary ornamentation.
+ *
+ * The animation system in `src/motion/` is the source of truth for
+ * transitions, easing, and timing. This file only describes static
+ * design tokens.
+ */
+
+:root {
+  /* Color: surfaces */
+  --color-bg: #0a0a0f;
+  --color-surface-1: #11111a;
+  --color-surface-2: #161624;
+  --color-surface-3: #1d1d2e;
+  --color-border: #232336;
+  --color-border-strong: #2e2e47;
+
+  /* Color: text */
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #b5b5c2;
+  --color-text-tertiary: #76768a;
+  --color-text-muted: #4f4f63;
+
+  /* Color: status (reserved, calm)
+     These are intentionally low-chroma to feel like
+     a financial product, not a notification feed. */
+  --color-status-pending: #a08a3a;
+  --color-status-pending-bg: rgba(160, 138, 58, 0.10);
+
+  --color-status-accepted: #5a6dab;
+  --color-status-accepted-bg: rgba(90, 109, 171, 0.10);
+
+  --color-status-funded: #4a7d68;
+  --color-status-funded-bg: rgba(74, 125, 104, 0.10);
+
+  --color-status-in-progress: #6d5cab;
+  --color-status-in-progress-bg: rgba(109, 92, 171, 0.10);
+
+  --color-status-submitted: #3d6e8a;
+  --color-status-submitted-bg: rgba(61, 110, 138, 0.10);
+
+  --color-status-approved: #4a8a6a;
+  --color-status-approved-bg: rgba(74, 138, 106, 0.10);
+
+  --color-status-disputed: #b06a5a;
+  --color-status-disputed-bg: rgba(176, 106, 90, 0.10);
+
+  --color-status-resolved: #6a6a7a;
+  --color-status-resolved-bg: rgba(106, 106, 122, 0.10);
+
+  --color-status-completed: #5a8a6a;
+  --color-status-completed-bg: rgba(90, 138, 106, 0.10);
+
+  /* Color: focus */
+  --color-focus: #8a8ac4;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+
+  --line-tight: 1.2;
+  --line-normal: 1.5;
+  --line-relaxed: 1.7;
+
+  /* Elevation - subtle, premium shadows */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  /* Layout */
+  --layout-max-width: 1200px;
+  --layout-rail-width: 240px;
+  --layout-header-height: 64px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--line-normal);
+  min-height: 100vh;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0;
+}
+
+input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Accessible focus styles that work even if motion is reduced */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: rgba(138, 138, 196, 0.30);
+  color: var(--color-text-primary);
+}
+
+/* Respect reduced motion globally */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Responsive: collapse sidebar into a top bar on small screens */
+@media (max-width: 768px) {
+  .ledger-app-shell {
+    grid-template-columns: 1fr !important;
+  }
+  .ledger-deal-detail-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .ledger-app-shell > aside {
+    position: relative !important;
+    height: auto !important;
+    width: 100% !important;
+  }
+}

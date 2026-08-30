@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Authentication & User Management
+// ============================================================
+
+model User {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String
+  role             Role      @default(CREATOR)
+  emailVerified    Boolean   @default(false)
+  lockedUntil      DateTime? // Account lockout expiration
+  failedLogins     Int       @default(0)
+  profile          UserProfile?
+  refreshTokens    RefreshToken[]
+  emailVerifications EmailVerification[]
+  auditLogs        AuditLog[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  @@index([email])
+  @@index([role])
+}
+
+model UserProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String?
+  company   String?
+  bio       String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Refresh tokens stored for revocation support
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique // SHA-256 hash of the token
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+}
+
+// Email verification tokens — stored as SHA-256 hash, not plaintext.
+model EmailVerification {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([tokenHash])
+  @@index([userId])
+}
+
+// ============================================================
+// Audit Logging (for auth events)
+// ============================================================
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorId      String?
+  actor        User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action       String   // e.g., "AUTH.LOGIN", "AUTH.REGISTER", "AUTH.FAILED_LOGIN"
+  resourceType String   // e.g., "User", "Session"
+  resourceId   String
+  metadata     Json?    // { ipAddress, userAgent, ... }
+  ipAddress    String?
+  timestamp    DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([resourceType, resourceId])
+  @@index([timestamp])
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum Role {
+  BRAND
+  CREATOR
+  HRT      // Human Review Team - dispute handling only
+  ADMIN    // System administration - user management, audit logs
+}
