@@ -23,6 +23,8 @@ model User {
   refreshTokens    RefreshToken[]
   emailVerifications EmailVerification[]
   auditLogs        AuditLog[]
+  dealsAsBrand     Deal[]    @relation("BrandDeals")
+  dealsAsCreator   Deal[]    @relation("CreatorDeals")
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   deletedAt        DateTime?
@@ -72,21 +74,61 @@ model EmailVerification {
 }
 
 // ============================================================
-// Audit Logging (for auth events)
+// Deal Domain
+// ============================================================
+
+model Deal {
+  id              String        @id @default(uuid())
+  brandId         String
+  brand           User          @relation("BrandDeals", fields: [brandId], references: [id])
+  creatorId       String?
+  creator         User?         @relation("CreatorDeals", fields: [creatorId], references: [id])
+  status          DealStatus    @default(DRAFT)
+  // NOTE: Deal terms are NOT stored here. DealVersion is the authoritative source for versioned terms.
+  contractId      String?
+  fundingStatus   FundingStatus @default(NOT_FUNDED)
+  versions        DealVersion[]
+  auditLogs       AuditLog[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([brandId])
+  @@index([creatorId])
+  @@index([status])
+  @@index([fundingStatus])
+}
+
+model DealVersion {
+  id           String   @id @default(uuid())
+  dealId       String
+  deal         Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  terms        Json
+  createdAt    DateTime @default(now())
+
+  @@unique([dealId, versionNumber])
+  @@index([dealId])
+}
+
+// ============================================================
+// Audit Logging (for auth events and deal events)
 // ============================================================
 
 model AuditLog {
   id           String   @id @default(uuid())
   actorId      String?
   actor        User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
-  action       String   // e.g., "AUTH.LOGIN", "AUTH.REGISTER", "AUTH.FAILED_LOGIN"
-  resourceType String   // e.g., "User", "Session"
+  dealId       String?
+  deal         Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  action       String   // e.g., "AUTH.LOGIN", "AUTH.REGISTER", "AUTH.FAILED_LOGIN", "DEAL.CREATED", "DEAL.STATE_CHANGED"
+  resourceType String   // e.g., "User", "Session", "Deal", "DealVersion"
   resourceId   String
   metadata     Json?    // { ipAddress, userAgent, ... }
   ipAddress    String?
   timestamp    DateTime @default(now())
 
   @@index([actorId])
+  @@index([dealId])
   @@index([action])
   @@index([resourceType, resourceId])
   @@index([timestamp])
@@ -101,4 +143,26 @@ enum Role {
   CREATOR
   HRT      // Human Review Team - dispute handling only
   ADMIN    // System administration - user management, audit logs
+}
+
+enum DealStatus {
+  DRAFT
+  PENDING_ACCEPTANCE
+  ACCEPTED
+  DECLINED
+  FUNDED
+  IN_PROGRESS
+  SUBMITTED
+  APPROVED
+  REVISION_REQUESTED
+  DISPUTED
+  RESOLVED
+  COMPLETED
+  CANCELLED
+}
+
+enum FundingStatus {
+  NOT_FUNDED
+  FUNDED
+  REFUNDED
 }

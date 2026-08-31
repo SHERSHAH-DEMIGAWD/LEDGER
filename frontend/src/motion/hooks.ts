@@ -165,7 +165,7 @@ export function useHoverPress(
   return {
     whileHover: { scale: hoverScale },
     whileTap: { scale: tapScale },
-    transition: { duration: 0.12, ease: [0.2, 0, 0, 1] },
+    transition: { duration: 0.12, ease: [0.2, 0, 0, 1] as [number, number, number, number] },
   };
 }
 
@@ -180,7 +180,7 @@ export function useHoverPress(
 export function usePressFeedback() {
   return {
     whileTap: { scale: 0.96 },
-    transition: { duration: 0.08, ease: [0.2, 0, 0, 1] },
+    transition: { duration: 0.08, ease: [0.2, 0, 0, 1] as [number, number, number, number] },
   };
 }
 

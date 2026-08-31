@@ -1,0 +1,94 @@
+/**
+ * types/deal.ts
+ *
+ * Canonical TypeScript types for the Deal domain.
+ * These mirror the backend API response shapes and are the single source of truth
+ * for all frontend deal-related components.
+ */
+
+import type { DealStatus } from './dealStates';
+
+// ---------------------------------------------------------------------------
+// Sub-resources
+// ---------------------------------------------------------------------------
+
+export interface DealParty {
+  id: string;
+  name: string;
+  role: string;
+  email?: string;
+}
+
+export interface DealDocument {
+  id: string;
+  name: string;
+  type: string;
+  size: string;
+  uploadedAt: string;
+  url?: string;
+}
+
+export interface DealEvent {
+  id: string;
+  type: string;
+  label: string;
+  description?: string;
+  actor?: string;
+  timestamp: string;
+}
+
+// ---------------------------------------------------------------------------
+// Core Deal
+// ---------------------------------------------------------------------------
+
+export interface Deal {
+  id: string;
+  title: string;
+  amount: number;
+  amountFormatted: string;
+  counterparties: string;
+  status: DealStatus;
+  description: string;
+  parties: DealParty[];
+  documents: DealDocument[];
+  events: DealEvent[];
+  createdAt: string;
+  updatedAt: string;
+  dueDate?: string;
+  closeDate?: string;
+  dealType?: string;
+  source?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Summary shape (for list views)
+// ---------------------------------------------------------------------------
+
+export interface DealSummary {
+  id: string;
+  title: string;
+  amount: number;
+  amountFormatted: string;
+  counterparties: string;
+  status: DealStatus;
+  updatedAt: string;
+  updatedAtRelative: string;
+}
+
+// ---------------------------------------------------------------------------
+// API response shapes
+// ---------------------------------------------------------------------------
+
+export interface DealListResponse {
+  deals: DealSummary[];
+  total: number;
+}
+
+export interface DealResponse {
+  deal: Deal;
+}
+
+export interface ApiError {
+  message: string;
+  code?: string;
+}

@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
+import dealRoutes from './routes/deal.routes.js';
 
 const app = express();
 

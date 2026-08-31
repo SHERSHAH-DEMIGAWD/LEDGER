@@ -252,7 +252,7 @@ interface TimelineDotProps {
 function TimelineDot({ state, status }: TimelineDotProps) {
   const reduced = useReducedMotion();
 
-  const statusToColor: Record<Status, string> = {
+  const statusToColor: Record<string, string> = {
     pending: 'var(--color-status-pending)',
     accepted: 'var(--color-status-accepted)',
     funded: 'var(--color-status-funded)',
@@ -262,6 +262,12 @@ function TimelineDot({ state, status }: TimelineDotProps) {
     disputed: 'var(--color-status-disputed)',
     resolved: 'var(--color-status-resolved)',
     completed: 'var(--color-status-completed)',
+    // DealState statuses that overlap
+    DRAFT: 'var(--color-status-draft)',
+    PENDING_ACCEPTANCE: 'var(--color-status-pending-acceptance)',
+    DECLINED: 'var(--color-status-declined)',
+    REVISION_REQUESTED: 'var(--color-status-revision-requested)',
+    CANCELLED: 'var(--color-status-cancelled)',
   };
 
   const isFilled = state === 'past' || state === 'current' || state === 'active';

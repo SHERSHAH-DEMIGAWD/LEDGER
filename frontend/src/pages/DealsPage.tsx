@@ -1,82 +1,63 @@
 /**
  * pages/DealsPage.tsx
  *
- * Demonstrates stacked layout animations and filters with DealTimeline.
- * Replace with real deals page as the app grows.
+ * The deals list — all deals with filter + search.
+ *
+ * Uses:
+ *   - useDeals() hook for data
+ *   - DealStateBadge + DEAL_STATES for status display
+ *   - DealListSkeleton / EmptyState / ErrorState for loading/empty/error
+ *   - DealStateTimeline for expanded row previews
+ *
+ * The frontend is purely presentational — all status values come from the
+ * authoritative backend, never inferred.
  */
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Stack, StackItem, Card, Expand, Reveal } from '../motion/components';
-import { StatusBadge, Status } from '../motion/StatusBadge';
 import { DealTimeline, type TimelineStep } from '../motion/DealTimeline';
-import { Button, Spacer } from '../components/ui';
+import { Button } from '../components/ui';
+import { DealStateBadge } from '../components/DealStateBadge';
+import { DealListSkeleton, EmptyState, ErrorState } from '../components/DealStateViews';
+import { useDeals, filterDeals } from '../hooks/useDeals';
 import { useReducedMotion } from '../motion/hooks';
+import { useHoverPress } from '../motion/hooks';
+import { duration, easing } from '../motion/variants';
+import { getDealStateConfig, DEAL_STATE_ORDER, type DealStatus } from '../types/dealStates';
+import type { DealSummary } from '../types/deal';
 
-const ALL_DEALS = [
-  {
-    id: '1',
-    title: 'Seed Bridge Capital — Series A',
-    amount: '$1,200,000',
-    counterparties: 'Bridge Ventures · Capital Group',
-    status: 'pending' as Status,
-    updatedAt: '2 hours ago',
-  },
-  {
-    id: '2',
-    title: 'Northbrook Acquisition — Series B',
-    amount: '$3,500,000',
-    counterparties: 'Northbrook Partners · Apex Fund',
-    status: 'funded' as Status,
-    updatedAt: 'Yesterday',
-  },
-  {
-    id: '3',
-    title: 'Meridian Growth — Bridge Loan',
-    amount: '$750,000',
-    counterparties: 'Meridian Capital',
-    status: 'completed' as Status,
-    updatedAt: '3 days ago',
-  },
-  {
-    id: '4',
-    title: 'Solaris Labs — Convertible Note',
-    amount: '$2,100,000',
-    counterparties: 'Solaris Ventures · Peak Equity',
-    status: 'disputed' as Status,
-    updatedAt: '5 days ago',
-  },
-  {
-    id: '5',
-    title: 'Ironwood Partners — Series C',
-    amount: '$5,000,000',
-    counterparties: 'Ironwood Capital · Summit Fund',
-    status: 'in_progress' as Status,
-    updatedAt: '1 week ago',
-  },
-];
+// ---------------------------------------------------------------------------
+// Filter definitions
+// ---------------------------------------------------------------------------
 
-const FILTERS: { label: string; value: string }[] = [
-  { label: 'All', value: 'all' },
+interface Filter {
+  label: string;
+  value: string;
+}
+
+const FILTERS: Filter[] = [
+  { label: 'All Deals', value: 'all' },
   { label: 'Active', value: 'active' },
   { label: 'Completed', value: 'completed' },
   { label: 'Disputed', value: 'disputed' },
+  { label: 'Declined', value: 'declined' },
+  { label: 'Cancelled', value: 'cancelled' },
 ];
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export function DealsPage() {
   const [activeFilter, setActiveFilter] = useState('all');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const { deals, total, loading, error, refetch } = useDeals();
   const reduced = useReducedMotion();
 
-  const filtered = ALL_DEALS.filter((d) => {
-    if (activeFilter === 'all') return true;
-    if (activeFilter === 'active')
-      return ['pending', 'funded', 'in_progress'].includes(d.status);
-    if (activeFilter === 'completed') return d.status === 'completed';
-    if (activeFilter === 'disputed') return d.status === 'disputed';
-    return true;
-  });
+  const filtered = filterDeals(deals, activeFilter, searchQuery);
 
   return (
     <div
@@ -93,198 +74,319 @@ export function DealsPage() {
       <motion.header
         initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: duration.normal, ease: easing.out }}
         style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}
       >
         <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, margin: 0 }}>
           Deals
         </h1>
         <p style={{ color: 'var(--color-text-secondary)', margin: 0, fontSize: 'var(--text-md)' }}>
-          {filtered.length} deal{filtered.length !== 1 ? 's' : ''}
+          {loading ? 'Loading…' : `${filtered.length} deal${filtered.length !== 1 ? 's' : ''}`}
+          {activeFilter !== 'all' && ' (filtered)'}
+          {searchQuery && ` matching "${searchQuery}"`}
         </p>
       </motion.header>
 
-      {/* Filters */}
+      {/* Search + Filters */}
       <Reveal>
         <div
           style={{
             display: 'flex',
-            gap: 'var(--space-2)',
-            flexWrap: 'wrap',
+            flexDirection: 'column',
+            gap: 'var(--space-3)',
           }}
-          role="tablist"
-          aria-label="Filter deals"
         >
-          {FILTERS.map((filter) => (
-            <motion.button
-              key={filter.value}
-              role="tab"
-              aria-selected={activeFilter === filter.value}
-              onClick={() => setActiveFilter(filter.value)}
-              whileTap={{ scale: 0.96 }}
-              transition={{ duration: 0.08 }}
+          {/* Search */}
+          <div style={{ position: 'relative' }}>
+            <SearchIcon />
+            <input
+              type="search"
+              placeholder="Search by title or counterparty…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search deals"
               style={{
-                padding: '6px 14px',
+                width: '100%',
+                padding: '9px 12px 9px 36px',
+                background: 'var(--color-surface-2)',
+                border: '1px solid var(--color-border)',
                 borderRadius: 'var(--radius-md)',
-                border: '1px solid',
-                borderColor:
-                  activeFilter === filter.value
-                    ? 'var(--color-border-strong)'
-                    : 'var(--color-border)',
-                background:
-                  activeFilter === filter.value
-                    ? 'var(--color-surface-2)'
-                    : 'transparent',
-                color:
-                  activeFilter === filter.value
-                    ? 'var(--color-text-primary)'
-                    : 'var(--color-text-tertiary)',
+                color: 'var(--color-text-primary)',
                 fontSize: 'var(--text-sm)',
-                fontWeight: activeFilter === filter.value ? 500 : 400,
-                cursor: 'pointer',
+                outline: 'none',
+                transition: 'border-color 0.15s',
               }}
-            >
-              {filter.label}
-            </motion.button>
-          ))}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-focus)';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border)';
+              }}
+            />
+          </div>
+
+          {/* Filter tabs */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--space-2)',
+              flexWrap: 'wrap',
+            }}
+            role="tablist"
+            aria-label="Filter deals"
+          >
+            {FILTERS.map((filter) => (
+              <motion.button
+                key={filter.value}
+                role="tab"
+                aria-selected={activeFilter === filter.value}
+                onClick={() => setActiveFilter(filter.value)}
+                whileTap={!reduced ? { scale: 0.96 } : undefined}
+                transition={{ duration: duration.fast, ease: easing.snap }}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid',
+                  borderColor:
+                    activeFilter === filter.value
+                      ? 'var(--color-border-strong)'
+                      : 'var(--color-border)',
+                  background:
+                    activeFilter === filter.value
+                      ? 'var(--color-surface-2)'
+                      : 'transparent',
+                  color:
+                    activeFilter === filter.value
+                      ? 'var(--color-text-primary)'
+                      : 'var(--color-text-tertiary)',
+                  fontSize: 'var(--text-sm)',
+                  fontWeight: activeFilter === filter.value ? 500 : 400,
+                  cursor: 'pointer',
+                  transition: 'border-color 0.15s, background 0.15s, color 0.15s',
+                }}
+              >
+                {filter.label}
+              </motion.button>
+            ))}
+          </div>
         </div>
       </Reveal>
 
-      {/* Deal list */}
-      <Stack
-        staggerDelay={0.05}
-        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}
-      >
-        {filtered.map((deal) => (
-          <StackItem key={deal.id} style={{ display: 'block' }}>
-            <Card
-              interactive
-              onClick={() => setExpandedId(expandedId === deal.id ? null : deal.id)}
-              style={{ overflow: 'hidden' }}
-            >
-              <div
-                style={{
-                  padding: 'var(--space-5)',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr auto',
-                  gap: 'var(--space-3)',
-                  alignItems: 'center',
+      {/* Content */}
+      {loading ? (
+        <DealListSkeleton count={5} />
+      ) : error ? (
+        <ErrorState
+          message={error}
+          onRetry={refetch}
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          title="No deals found"
+          description={
+            searchQuery
+              ? `No deals match "${searchQuery}". Try a different search term.`
+              : activeFilter !== 'all'
+              ? `No deals in this category.`
+              : `No deals yet.`
+          }
+          action={
+            (searchQuery || activeFilter !== 'all') ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery('');
+                  setActiveFilter('all');
                 }}
               >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                  <span style={{ fontWeight: 600, fontSize: 'var(--text-md)' }}>
-                    {deal.title}
-                  </span>
-                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                    {deal.counterparties}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-end',
-                    gap: 'var(--space-2)',
-                  }}
-                >
-                  <StatusBadge status={deal.status} size="sm" />
-                  <span
-                    style={{
-                      fontSize: 'var(--text-md)',
-                      fontWeight: 600,
-                      fontFamily: 'var(--font-mono)',
-                    }}
-                  >
-                    {deal.amount}
-                  </span>
-                </div>
-              </div>
-
-              {/* Expandable area */}
-              <Expand isOpen={expandedId === deal.id}>
-                <div
-                  style={{
-                    padding: 'var(--space-4) var(--space-5)',
-                    borderTop: '1px solid var(--color-border)',
-                    background: 'var(--color-surface-2)',
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 'var(--space-6)',
-                  }}
-                >
-                  <DealTimeline
-                    steps={getMockSteps(deal.status)}
-                    currentId={getMockCurrentId(deal.status)}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', justifyContent: 'center' }}>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      Last updated
-                    </span>
-                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                      {deal.updatedAt}
-                    </span>
-                    <Spacer size={2} />
-                    <Link to={`/deals/${deal.id}`}>
-                      <Button size="sm" variant="secondary">
-                        View Deal →
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              </Expand>
-            </Card>
-          </StackItem>
-        ))}
-      </Stack>
+                Clear filters
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <Stack
+          staggerDelay={0.05}
+          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}
+        >
+          {filtered.map((deal) => (
+            <StackItem key={deal.id} style={{ display: 'block' }}>
+              <DealRow deal={deal} />
+            </StackItem>
+          ))}
+        </Stack>
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Mock timeline helpers
+// DealRow — expandable list item
 // ---------------------------------------------------------------------------
 
-function getMockSteps(status: Status): TimelineStep[] {
-  const base: TimelineStep[] = [
-    {
-      id: 'created',
-      label: 'Deal Created',
-      status: 'completed',
-      timestamp: 'Aug 15, 2026',
-    },
-    {
-      id: 'submitted',
-      label: 'Submitted',
-      status: 'completed',
-      timestamp: 'Aug 16, 2026',
-    },
-    {
-      id: 'pending',
-      label: 'Under Review',
-      status: status === 'pending' ? 'pending' : 'completed',
-      timestamp: status === 'pending' ? undefined : 'Aug 17, 2026',
-    },
-    {
-      id: 'funded',
-      label: 'Funded',
-      status: ['funded', 'completed'].includes(status) ? 'completed' : 'accepted',
-      timestamp: ['funded', 'completed'].includes(status) ? 'Aug 20, 2026' : undefined,
-    },
-    {
-      id: 'completed',
-      label: 'Completed',
-      status: status === 'completed' ? 'completed' : 'accepted',
-      timestamp: status === 'completed' ? 'Aug 25, 2026' : undefined,
-    },
-  ];
-  return base;
+function DealRow({ deal }: { deal: DealSummary }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const reduced = useReducedMotion();
+  const press = useHoverPress({ disabled: reduced });
+
+  const statusConfig = getDealStateConfig(deal.status);
+
+  return (
+    <Card interactive style={{ overflow: 'hidden' }}>
+      <motion.button
+        onClick={() => setIsExpanded(!isExpanded)}
+        whileTap={press.whileTap}
+        transition={press.transition}
+        aria-expanded={isExpanded}
+        aria-label={`${deal.title} — ${statusConfig?.label ?? deal.status}. Click to ${isExpanded ? 'collapse' : 'expand'}.`}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr auto',
+          gap: 'var(--space-3)',
+          alignItems: 'center',
+          padding: 'var(--space-5)',
+          width: '100%',
+          textAlign: 'left',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'inherit',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', minWidth: 0 }}>
+          <span
+            style={{
+              fontWeight: 600,
+              fontSize: 'var(--text-md)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {deal.title}
+          </span>
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+            {deal.counterparties}
+          </span>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 'var(--space-2)',
+            flexShrink: 0,
+          }}
+        >
+          <DealStateBadge status={deal.status} size="sm" />
+          <span
+            style={{
+              fontSize: 'var(--text-md)',
+              fontWeight: 600,
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {deal.amountFormatted}
+          </span>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+            {deal.updatedAtRelative}
+          </span>
+        </div>
+      </motion.button>
+
+      {/* Expandable area — preview timeline + view action */}
+      <Expand isOpen={isExpanded}>
+        <div
+          style={{
+            padding: 'var(--space-4) var(--space-5)',
+            borderTop: '1px solid var(--color-border)',
+            background: 'var(--color-surface-2)',
+            display: 'grid',
+            gridTemplateColumns: '1fr auto',
+            gap: 'var(--space-6)',
+            alignItems: 'start',
+          }}
+        >
+          <DealTimeline
+            steps={buildPreviewSteps(deal.status)}
+            currentId={getCurrentStepId(deal.status)}
+          />
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-2)',
+              alignItems: 'flex-end',
+            }}
+          >
+            <Link to={`/deals/${deal.id}`} style={{ textDecoration: 'none' }}>
+              <Button size="sm" variant="secondary">
+                View Deal →
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </Expand>
+    </Card>
+  );
 }
 
-function getMockCurrentId(status: Status): string {
-  if (status === 'pending') return 'pending';
-  if (status === 'funded') return 'funded';
-  if (status === 'completed') return 'completed';
-  if (status === 'disputed') return 'pending';
-  if (status === 'in_progress') return 'pending';
-  return 'pending';
+// ---------------------------------------------------------------------------
+// Timeline helpers (presentational — data comes from backend)
+// ---------------------------------------------------------------------------
+
+function buildPreviewSteps(status: DealStatus): TimelineStep[] {
+  const all = DEAL_STATE_ORDER;
+  const config = getDealStateConfig(status);
+  const currentOrder = config?.order ?? 0;
+
+  return all.slice(0, Math.min(currentOrder + 3, all.length)).map((s) => {
+    const cfg = getDealStateConfig(s);
+    const order = cfg?.order ?? 0;
+    let stepStatus: 'completed' | 'pending' | 'accepted' = 'accepted';
+    if (order < currentOrder) stepStatus = 'completed';
+    if (order === currentOrder) stepStatus = 'pending';
+    return {
+      id: s,
+      label: cfg?.label ?? s,
+      status: stepStatus,
+    };
+  });
+}
+
+function getCurrentStepId(status: DealStatus): string {
+  return status;
+}
+
+// ---------------------------------------------------------------------------
+// SearchIcon — inline magnifier for the search input
+// ---------------------------------------------------------------------------
+
+function SearchIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden
+      style={{
+        position: 'absolute',
+        left: 12,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        color: 'var(--color-text-tertiary)',
+        pointerEvents: 'none',
+      }}
+    >
+      <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M11 11l3 3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }

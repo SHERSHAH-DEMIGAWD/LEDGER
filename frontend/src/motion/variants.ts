@@ -30,16 +30,16 @@ export const duration = {
 
 export const easing = {
   /** Subtle ease-out for exits */
-  out: [0.16, 1, 0.3, 1],
+  out: [0.16, 1, 0.3, 1] as [number, number, number, number],
 
   /** Gentle ease-in-out for entering */
-  inOut: [0.65, 0, 0.35, 1],
+  inOut: [0.65, 0, 0.35, 1] as [number, number, number, number],
 
   /** Immediate snap for feedback interactions */
-  snap: [0.2, 0, 0, 1],
+  snap: [0.2, 0, 0, 1] as [number, number, number, number],
 
   /** Linear (rarely used — reserved for opacity-only fades) */
-  linear: [0, 0, 1, 1],
+  linear: [0, 0, 1, 1] as [number, number, number, number],
 };
 
 // ---------------------------------------------------------------------------

@@ -300,7 +300,6 @@ describe('Refresh Token Rotation Contract', () => {
     // Simulate the atomic WHERE-clause contract:
     // updateMany({ where: { tokenHash, revokedAt: null } })
     const tokenHash = 'token-hash-abc';
-    const revokedHashes = new Set<string>([tokenHash]);
     let revokedAt: Date | null = null;
 
     // Caller A wins the race

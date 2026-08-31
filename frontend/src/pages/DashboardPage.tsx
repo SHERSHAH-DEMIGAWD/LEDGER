@@ -1,62 +1,42 @@
 /**
  * pages/DashboardPage.tsx
  *
- * Demonstrates the motion animation system on a dashboard layout.
- * Replace with real dashboard implementation as the app grows.
+ * Overview dashboard with stats and recent deals.
+ * Uses the same useDeals() hook and DealStateBadge component as the
+ * deals page so the dashboard is consistent with the rest of the app.
  */
 
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { Reveal, Stack, StackItem, Card } from '../motion/components';
-import { StatusBadge } from '../motion/StatusBadge';
-import { useReducedMotion } from '../motion/hooks';
+import { DealListSkeleton, ErrorState, EmptyState } from '../components/DealStateViews';
+import { useDeals } from '../hooks/useDeals';
+import { useReducedMotion, useHoverPress } from '../motion/hooks';
+import { duration, easing } from '../motion/variants';
 import { Button } from '../components/ui';
+import { DealStateBadge } from '../components/DealStateBadge';
+import { getDealStateConfig, type DealStatus } from '../types/dealStates';
+import type { DealSummary } from '../types/deal';
 
 // ---------------------------------------------------------------------------
-// Mock data
+// Stat categories — derived from a status, presentational only
 // ---------------------------------------------------------------------------
 
-const DEALS = [
-  {
-    id: '1',
-    title: 'Seed Bridge Capital — Series A',
-    amount: '$1,200,000',
-    counterparties: 'Bridge Ventures · Capital Group',
-    status: 'pending' as const,
-    updatedAt: '2 hours ago',
-  },
-  {
-    id: '2',
-    title: 'Northbrook Acquisition — Series B',
-    amount: '$3,500,000',
-    counterparties: 'Northbrook Partners · Apex Fund',
-    status: 'funded' as const,
-    updatedAt: 'Yesterday',
-  },
-  {
-    id: '3',
-    title: 'Meridian Growth — Bridge Loan',
-    amount: '$750,000',
-    counterparties: 'Meridian Capital',
-    status: 'completed' as const,
-    updatedAt: '3 days ago',
-  },
-  {
-    id: '4',
-    title: 'Solaris Labs — Convertible Note',
-    amount: '$2,100,000',
-    counterparties: 'Solaris Ventures · Peak Equity',
-    status: 'disputed' as const,
-    updatedAt: '5 days ago',
-  },
-  {
-    id: '5',
-    title: 'Ironwood Partners — Series C',
-    amount: '$5,000,000',
-    counterparties: 'Ironwood Capital · Summit Fund',
-    status: 'in_progress' as const,
-    updatedAt: '1 week ago',
-  },
+const ACTIVE_STATUSES: DealStatus[] = [
+  'DRAFT',
+  'PENDING_ACCEPTANCE',
+  'FUNDED',
+  'IN_PROGRESS',
+  'SUBMITTED',
+  'APPROVED',
+  'REVISION_REQUESTED',
+];
+
+const PENDING_STATUSES: DealStatus[] = [
+  'DRAFT',
+  'PENDING_ACCEPTANCE',
+  'SUBMITTED',
+  'REVISION_REQUESTED',
 ];
 
 // ---------------------------------------------------------------------------
@@ -65,6 +45,15 @@ const DEALS = [
 
 export function DashboardPage() {
   const reduced = useReducedMotion();
+  const { deals, loading, error, refetch } = useDeals();
+
+  const totalValue = deals.reduce((sum, d) => sum + d.amount, 0);
+  const activeCount = deals.filter((d) => ACTIVE_STATUSES.includes(d.status)).length;
+  const pendingCount = deals.filter((d) => PENDING_STATUSES.includes(d.status)).length;
+  const completedCount = deals.filter((d) => d.status === 'COMPLETED').length;
+  const recent = [...deals]
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 5);
 
   return (
     <div
@@ -81,7 +70,7 @@ export function DashboardPage() {
       <motion.header
         initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: duration.normal, ease: easing.out }}
         style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}
       >
         <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, margin: 0 }}>
@@ -101,10 +90,26 @@ export function DashboardPage() {
             gap: 'var(--space-4)',
           }}
         >
-          <StatCard label="Active Deals" value="3" sub="+1 this month" />
-          <StatCard label="Total Value" value="$12.5M" sub="Across 8 deals" />
-          <StatCard label="Pending" value="2" sub="Awaiting action" />
-          <StatCard label="Completed" value="5" sub="This quarter" />
+          <StatCard
+            label="Active Deals"
+            value={loading ? '…' : String(activeCount)}
+            sub={loading ? 'Loading' : 'Currently in motion'}
+          />
+          <StatCard
+            label="Total Value"
+            value={loading ? '…' : formatCompactCurrency(totalValue)}
+            sub={loading ? 'Loading' : `Across ${deals.length} deals`}
+          />
+          <StatCard
+            label="Pending"
+            value={loading ? '…' : String(pendingCount)}
+            sub={loading ? 'Loading' : 'Awaiting action'}
+          />
+          <StatCard
+            label="Completed"
+            value={loading ? '…' : String(completedCount)}
+            sub={loading ? 'Loading' : 'All time'}
+          />
         </div>
       </Reveal>
 
@@ -122,7 +127,7 @@ export function DashboardPage() {
             <h2 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: 0 }}>
               Recent Deals
             </h2>
-            <Link to="/deals">
+            <Link to="/deals" style={{ textDecoration: 'none' }}>
               <Button variant="ghost" size="sm">
                 View all →
               </Button>
@@ -130,16 +135,34 @@ export function DashboardPage() {
           </div>
         </Reveal>
 
-        <Stack
-          staggerDelay={0.04}
-          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}
-        >
-          {DEALS.map((deal) => (
-            <StackItem key={deal.id} style={{ display: 'block' }}>
-              <DealCard deal={deal} />
-            </StackItem>
-          ))}
-        </Stack>
+        {loading ? (
+          <DealListSkeleton count={3} />
+        ) : error ? (
+          <ErrorState message={error} onRetry={refetch} />
+        ) : recent.length === 0 ? (
+          <EmptyState
+            title="No deals yet"
+            description="Once you create your first deal, it will show up here."
+            action={
+              <Link to="/deals" style={{ textDecoration: 'none' }}>
+                <Button size="sm" variant="secondary">
+                  Browse deals
+                </Button>
+              </Link>
+            }
+          />
+        ) : (
+          <Stack
+            staggerDelay={0.04}
+            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}
+          >
+            {recent.map((deal) => (
+              <StackItem key={deal.id} style={{ display: 'block' }}>
+                <DealCard deal={deal} />
+              </StackItem>
+            ))}
+          </Stack>
+        )}
       </section>
     </div>
   );
@@ -158,10 +181,11 @@ function StatCard({
   value: string;
   sub: string;
 }) {
+  const reduced = useReducedMotion();
+
   return (
     <motion.div
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.12, ease: [0.2, 0, 0, 1] }}
+      whileHover={!reduced ? { y: -2, transition: { duration: duration.fast, ease: easing.out } } : undefined}
       style={{
         padding: 'var(--space-5)',
         background: 'var(--color-surface-1)',
@@ -186,24 +210,20 @@ function StatCard({
 }
 
 // ---------------------------------------------------------------------------
-// DealCard — demonstrates layoutId for shared element transitions
+// DealCard — uses layoutId for shared element transitions
 // ---------------------------------------------------------------------------
 
-interface Deal {
-  id: string;
-  title: string;
-  amount: string;
-  counterparties: string;
-  status: 'pending' | 'funded' | 'completed' | 'disputed' | 'in_progress';
-  updatedAt: string;
-}
+function DealCard({ deal }: { deal: DealSummary }) {
+  const reduced = useReducedMotion();
+  const press = useHoverPress({ disabled: reduced });
+  const statusConfig = getDealStateConfig(deal.status);
 
-function DealCard({ deal }: { deal: Deal }) {
   return (
     <motion.div layoutId={`deal-card-${deal.id}`}>
       <Card interactive>
         <Link to={`/deals/${deal.id}`} style={{ textDecoration: 'none' }}>
-          <div
+          <motion.div
+            {...press}
             style={{
               padding: 'var(--space-5)',
               display: 'grid',
@@ -212,18 +232,25 @@ function DealCard({ deal }: { deal: Deal }) {
               alignItems: 'start',
             }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-              <span
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', minWidth: 0 }}>
+              <motion.span
                 layoutId={`deal-title-${deal.id}`}
-                style={{ fontWeight: 600, fontSize: 'var(--text-md)' }}
+                style={{
+                  fontWeight: 600,
+                  fontSize: 'var(--text-md)',
+                  display: 'inline-block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
               >
                 {deal.title}
-              </span>
+              </motion.span>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
                 {deal.counterparties}
               </span>
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                Updated {deal.updatedAt}
+                Updated {deal.updatedAtRelative}
               </span>
             </div>
             <div
@@ -232,9 +259,10 @@ function DealCard({ deal }: { deal: Deal }) {
                 flexDirection: 'column',
                 alignItems: 'flex-end',
                 gap: 'var(--space-2)',
+                flexShrink: 0,
               }}
             >
-              <StatusBadge
+              <DealStateBadge
                 layoutId={`deal-status-${deal.id}`}
                 status={deal.status}
                 size="sm"
@@ -246,12 +274,31 @@ function DealCard({ deal }: { deal: Deal }) {
                   fontFamily: 'var(--font-mono)',
                 }}
               >
-                {deal.amount}
+                {deal.amountFormatted}
+              </span>
+              <span
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
+                {statusConfig?.label ?? deal.status}
               </span>
             </div>
-          </div>
+          </motion.div>
         </Link>
       </Card>
     </motion.div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Format helpers
+// ---------------------------------------------------------------------------
+
+function formatCompactCurrency(value: number): string {
+  if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+  return `$${value.toFixed(0)}`;
 }

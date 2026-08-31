@@ -26,3 +26,7 @@ export * from './hooks';
 
 // Re-export the components folder
 export * from './components';
+
+// Re-export the deal state timeline
+export { DealStateTimeline } from './DealStateTimeline';
+export type { DealStateTimelineProps } from './DealStateTimeline';
