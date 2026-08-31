@@ -1,11 +1,10 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { PrismaClient, User, Prisma } from '@prisma/client';
+import { User, Prisma } from '@prisma/client';
+import { prisma } from '../db.js';
 import { config } from '../config.js';
 import { generateToken, hashToken, emailService } from '../utils/email.js';
 import { UnauthorizedError, ConflictError, ValidationError } from '../middleware/errorHandler.js';
-
-const prisma = new PrismaClient();
 
 const MAX_FAILED_LOGINS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes

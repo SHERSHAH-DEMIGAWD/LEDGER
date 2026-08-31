@@ -11,7 +11,6 @@
  * server-side and derived from the verified JWT.
  */
 
-import { PrismaClient } from '@prisma/client';
 import {
   validateTransition,
   listAvailableActions,
@@ -22,16 +21,13 @@ import {
 } from '../domain/state-machine/DealStateMachine.js';
 import { validateDealTerms, type DealTerms } from '../domain/value-objects/DealTerms.js';
 import { InvalidStateError } from '../domain/errors/index.js';
+import { prisma } from '../db.js';
 import {
   dealRepository,
   type DealWithVersions,
   type DealFilter,
 } from '../repositories/DealRepository.js';
 import type { Role } from '../types.js';
-
-// Local Prisma instance for audit log reads (deal history).
-// Separate instance so we don't couple repository internals to history query.
-const prisma = new PrismaClient();
 
 // ---------------------------------------------------------------------------------------
 // Public API
@@ -120,6 +116,9 @@ export async function getDealState(
 
 /**
  * List deals accessible to the requester.
+ *
+ * `filter.status` accepts a single status or an array; arrays become
+ * a `status IN (...)` filter at the repository layer.
  */
 export async function listDeals(
   requesterId: string,
@@ -135,12 +134,13 @@ export async function listDeals(
  * This is the canonical server-side transition gate. It:
  * 1. Loads the authoritative deal state from the DB
  * 2. Validates the transition (current state + actor role + participation)
- * 3. Updates the deal status atomically
+ * 3. Updates the deal status atomically with optimistic locking
  * 4. Creates an audit log entry
  *
  * Returns the updated deal on success.
  * Throws InvalidStateError on invalid transition.
  * Throws UnauthorizedAccessError on unauthorized attempt.
+ * Throws DealVersionConflictError if a concurrent transition races us.
  */
 export async function transitionDeal(
   dealId: string,
@@ -159,11 +159,12 @@ export async function transitionDeal(
     isDealParticipant: { brandId: deal.brandId, creatorId: deal.creatorId },
   });
 
-  // 3. Update status in transaction (repo performs participant access check)
+  // 3. Update status in transaction (repo performs participant access check
+  //    and optimistic locking based on the updatedAt we just observed).
   const updated = await dealRepository.updateStatus(
     dealId,
     targetStatus,
-    actor.id,
+    deal.updatedAt,
     actor.id,
     actor.role,
   );
@@ -187,12 +188,18 @@ export async function transitionDeal(
 
 /**
  * Invite a creator to a deal.
- * Assigns the creatorId and transitions DRAFT → PENDING_ACCEPTANCE.
  *
- * The state machine lists SUBMIT_FOR_ACCEPTANCE as DRAFT → PENDING_ACCEPTANCE,
- * but does not have a way to attach a creator at transition time. This service
- * keeps the two concerns together: the actor must be the brand owner and the
- * deal must be in DRAFT.
+ * The deal must currently be in DRAFT status and the actor must be the deal's
+ * brand owner (or an ADMIN). The service:
+ *  1. Loads the deal
+ *  2. Validates brand ownership
+ *  3. Validates the state machine transition (DRAFT → PENDING_ACCEPTANCE)
+ *  4. Atomically assigns the creatorId AND transitions the status
+ *  5. Writes an audit log entry
+ *
+ * The creatorId assignment and status update are wrapped in a single
+ * repository transaction so a partial failure cannot leave the deal
+ * with a creatorId but no status change (or vice versa).
  */
 export async function inviteCreator(
   dealId: string,
@@ -221,16 +228,9 @@ export async function inviteCreator(
     );
   }
 
-  // 4. Persist creatorId via a dedicated update path.
-  //    We don't have a setCreatorId repo method yet, so do it inline here.
-  //    This is the only place outside the repository that touches the deal row.
-  await prisma.deal.update({
-    where: { id: dealId },
-    data: { creatorId },
-  });
-
-  // 5. Move status DRAFT → PENDING_ACCEPTANCE through the state machine
-  //    (use SUBMIT_FOR_ACCEPTANCE which is the canonical action for this transition)
+  // 4. Validate transition against the state machine (the source of truth).
+  //    The participant check is for the actor — the new creatorId being
+  //    attached is the *result* of this transition, not a precondition.
   const targetStatus = validateTransition(
     deal.status,
     'SUBMIT_FOR_ACCEPTANCE',
@@ -238,10 +238,12 @@ export async function inviteCreator(
     { isDealParticipant: { brandId: deal.brandId, creatorId } },
   );
 
-  const updated = await dealRepository.updateStatus(
+  // 5. Atomically assign creatorId + transition status in one transaction.
+  const updated = await dealRepository.assignCreatorAndTransition(
     dealId,
+    creatorId,
     targetStatus,
-    actor.id,
+    deal.updatedAt,
     actor.id,
     actor.role,
   );
@@ -261,6 +263,69 @@ export async function inviteCreator(
   });
 
   return updated;
+}
+
+/**
+ * List invitations for a creator — deals in PENDING_ACCEPTANCE state
+ * where the creatorId matches the requester.
+ *
+ * Returns only the data a creator needs to decide whether to accept:
+ * deal ID, brand info, terms snapshot, status, and timestamp.
+ *
+ * Authorization: CREATOR role only (enforced at the route layer).
+ * A non-creator calling this via the API will get an empty array since
+ * the repository's access filter for non-creators does not match
+ * deals by creatorId.
+ */
+export async function listCreatorInvitations(
+  requesterId: string,
+  requesterRole: string,
+): Promise<Array<{
+  id: string;
+  status: DealStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  brandId: string;
+  terms: DealTerms;
+  latestVersionNumber: number;
+}>> {
+  // Only creators can list their invitations through this path.
+  // The repository filter also enforces this: for CREATOR role,
+  // findAccessibleToUser returns deals where creatorId = userId.
+  // But we want ONLY PENDING_ACCEPTANCE deals for invitations.
+  if (requesterRole !== 'CREATOR' && requesterRole !== 'ADMIN') {
+    // Return empty for non-creators — they use the general listDeals path.
+    return [];
+  }
+
+  const pendingDeals = await dealRepository.findAccessibleToUser(
+    requesterId,
+    requesterRole,
+    { status: 'PENDING_ACCEPTANCE' },
+  );
+
+  // Audit log: record that creator viewed their invitations.
+  // Only log once per request (not per deal) to avoid noise.
+  await dealRepository.createAuditLog({
+    actorId: requesterId,
+    action: 'INVITATION.VIEWED',
+    resourceType: 'InvitationList',
+    resourceId: `invitations:${requesterId}`,
+    metadata: { dealCount: pendingDeals.length },
+  });
+
+  return pendingDeals.map((deal) => {
+    const latest = deal.versions[deal.versions.length - 1];
+    return {
+      id: deal.id,
+      status: deal.status,
+      createdAt: deal.createdAt,
+      updatedAt: deal.updatedAt,
+      brandId: deal.brandId,
+      terms: latest?.terms ?? deal.versions[0].terms,
+      latestVersionNumber: latest?.versionNumber ?? 1,
+    };
+  });
 }
 
 /**

@@ -1,10 +1,9 @@
-import { PrismaClient, Deal, DealVersion, Prisma } from '@prisma/client';
+import { Deal, DealVersion, Prisma } from '@prisma/client';
+import { prisma } from '../db.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 import { UnauthorizedAccessError } from '../domain/errors/index.js';
 import type { DealStatus, FundingStatus } from '../domain/state-machine/DealStateMachine.js';
 import type { DealTerms } from '../domain/value-objects/DealTerms.js';
-
-const prisma = new PrismaClient();
 
 export interface DealWithVersions {
   id: string;
@@ -31,7 +30,7 @@ export interface CreateDealInput {
 export interface UpdateDealStatusInput {
   dealId: string;
   newStatus: DealStatus;
-  actorId: string;
+  expectedUpdatedAt: Date;
 }
 
 export interface DealFilter {
@@ -146,30 +145,40 @@ export class DealRepository {
   }
 
   /**
-   * Update the status of a Deal.
-   * Uses optimistic locking via updatedAt to prevent concurrent race conditions.
+   * Update the status of a Deal atomically with optimistic locking.
+   *
+   * Concurrency safety: the UPDATE is gated on `expectedUpdatedAt` matching
+   * the row that was loaded by the caller. If another concurrent transition
+   * already moved the deal, the WHERE clause will match zero rows and we
+   * raise a domain error so the caller can retry against fresh state.
+   *
    * Throws NotFoundError if deal doesn't exist.
+   * Throws DealVersionConflictError (mapped to HTTP 409) if optimistic lock fails.
    * Throws UnauthorizedAccessError if user is not authorized.
    */
   async updateStatus(
     dealId: string,
     newStatus: DealStatus,
-    _actorId: string,
+    expectedUpdatedAt: Date,
     requesterId: string,
     requesterRole: string,
   ): Promise<DealWithVersions> {
-    // First, load the deal with a lock to prevent concurrent transitions
+    // First, load the deal to verify access; the returned row also gives us
+    // the timestamp we use for the optimistic lock.
     const existingDeal = await this.findByIdWithAccessCheck(dealId, requesterId, requesterRole);
 
-    const updated = await prisma.$transaction(async (tx) => {
-      // Use a row-level lock on the deal to serialize concurrent transition attempts
-      // In PostgreSQL, SELECT ... FOR UPDATE achieves this.
-      // Prisma doesn't expose FOR UPDATE directly, so we rely on the unique constraint
-      // on status + updatedAt being enforced, with a retry loop below.
+    // We require the caller to pass the same updatedAt we just observed.
+    // If they don't, it's a programmer error and we use the freshly-read value.
+    const expected =
+      expectedUpdatedAt instanceof Date
+        ? expectedUpdatedAt
+        : existingDeal.updatedAt;
+
+    return prisma.$transaction(async (tx) => {
       const result = await tx.deal.updateMany({
         where: {
           id: dealId,
-          updatedAt: existingDeal.updatedAt, // Optimistic locking
+          updatedAt: expected, // Optimistic lock
         },
         data: {
           status: newStatus,
@@ -178,7 +187,12 @@ export class DealRepository {
       });
 
       if (result.count === 0) {
-        throw new Error('CONCURRENT_MODIFICATION: The deal was modified by another request. Please retry.');
+        // Either the deal was deleted, or another transition already moved it.
+        // Either way, the caller's view of state is stale.
+        const { DealVersionConflictError } = await import('../domain/errors/index.js');
+        throw new DealVersionConflictError(
+          'Deal was modified by another request. Please reload and retry.',
+        );
       }
 
       const deal = await tx.deal.findUnique({
@@ -190,14 +204,67 @@ export class DealRepository {
         },
       });
 
-      return deal;
+      if (!deal) {
+        throw new NotFoundError('Deal', dealId);
+      }
+
+      return this.mapToDealWithVersions(deal);
     });
+  }
 
-    if (!updated) {
-      throw new NotFoundError('Deal', dealId);
-    }
+  /**
+   * Atomically set the deal's creatorId and update its status in a single
+   * transaction. The state machine must already have been consulted to
+   * determine that the (DRAFT → PENDING_ACCEPTANCE) transition is valid;
+   * this method only persists the new creator + new status.
+   *
+   * Optimistic locking is enforced so a concurrent transition cannot race
+   * with this assignment.
+   */
+  async assignCreatorAndTransition(
+    dealId: string,
+    creatorId: string,
+    newStatus: DealStatus,
+    expectedUpdatedAt: Date,
+    requesterId: string,
+    requesterRole: string,
+  ): Promise<DealWithVersions> {
+    const existingDeal = await this.findByIdWithAccessCheck(dealId, requesterId, requesterRole);
+    const expected =
+      expectedUpdatedAt instanceof Date ? expectedUpdatedAt : existingDeal.updatedAt;
 
-    return this.mapToDealWithVersions(updated);
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.deal.updateMany({
+        where: { id: dealId, updatedAt: expected },
+        data: {
+          creatorId,
+          status: newStatus,
+          updatedAt: new Date(),
+        },
+      });
+
+      if (result.count === 0) {
+        const { DealVersionConflictError } = await import('../domain/errors/index.js');
+        throw new DealVersionConflictError(
+          'Deal was modified by another request. Please reload and retry.',
+        );
+      }
+
+      const deal = await tx.deal.findUnique({
+        where: { id: dealId },
+        include: {
+          versions: {
+            orderBy: { versionNumber: 'asc' },
+          },
+        },
+      });
+
+      if (!deal) {
+        throw new NotFoundError('Deal', dealId);
+      }
+
+      return this.mapToDealWithVersions(deal);
+    });
   }
 
   /**

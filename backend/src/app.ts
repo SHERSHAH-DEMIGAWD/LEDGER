@@ -52,6 +52,7 @@ app.get('/health', (_req, res) => {
 // Routes
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
+app.use('/deals', dealRoutes);
 
 // Error handling
 app.use(notFoundHandler);

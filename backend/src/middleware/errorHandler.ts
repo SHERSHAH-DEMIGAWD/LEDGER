@@ -1,5 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config.js';
+import {
+  DomainError,
+  InvalidStateError,
+  UnauthorizedAccessError,
+  DealTermsValidationError,
+  DealVersionConflictError,
+} from '../domain/errors/index.js';
 
 export class AppError extends Error {
   constructor(
@@ -74,6 +81,35 @@ export const errorHandler = (
       error: {
         code: err.code,
         message: clientMessage,
+      },
+    });
+  }
+
+  // Domain errors (state machine, validation, authorization)
+  // Map known subclasses to appropriate HTTP status codes.
+  if (err instanceof DomainError) {
+    let statusCode = 400;
+    let code = 'DEAL_001';
+
+    if (err instanceof UnauthorizedAccessError) {
+      statusCode = 403;
+      code = 'AUTH_011';
+    } else if (err instanceof DealTermsValidationError) {
+      statusCode = 400;
+      code = 'VAL_001';
+    } else if (err instanceof DealVersionConflictError) {
+      statusCode = 409;
+      code = 'RES_002';
+    } else if (err instanceof InvalidStateError) {
+      statusCode = 400;
+      code = 'DEAL_001';
+    }
+
+    return res.status(statusCode).json({
+      success: false,
+      error: {
+        code,
+        message: err.message,
       },
     });
   }

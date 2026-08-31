@@ -299,7 +299,6 @@ describe('Refresh Token Rotation Contract', () => {
   it('concurrent rotation attempts with the same token: only one should succeed', () => {
     // Simulate the atomic WHERE-clause contract:
     // updateMany({ where: { tokenHash, revokedAt: null } })
-    const tokenHash = 'token-hash-abc';
     let revokedAt: Date | null = null;
 
     // Caller A wins the race

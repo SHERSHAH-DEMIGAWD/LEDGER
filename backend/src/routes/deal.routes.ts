@@ -15,17 +15,57 @@ import {
   transitionDealSchema,
   inviteCreatorSchema,
 } from '../schemas/deal.schemas.js';
-import type { DealAction } from '../domain/state-machine/DealStateMachine.js';
+import type { DealAction, DealStatus } from '../domain/state-machine/DealStateMachine.js';
+import { ValidationError } from '../middleware/errorHandler.js';
 
 const router = Router();
+
+const ALL_STATUSES: DealStatus[] = [
+  'DRAFT',
+  'PENDING_ACCEPTANCE',
+  'ACCEPTED',
+  'DECLINED',
+  'FUNDED',
+  'IN_PROGRESS',
+  'SUBMITTED',
+  'APPROVED',
+  'REVISION_REQUESTED',
+  'DISPUTED',
+  'RESOLVED',
+  'COMPLETED',
+  'CANCELLED',
+];
 
 /**
  * GET /deals
  * List deals accessible to the authenticated user.
+ *
+ * Optional query: `status` (single value or repeated for an IN list).
+ * Unknown statuses return 400.
  */
 router.get('/', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const deals = await listDeals(req.user!.id, req.user!.role);
+    let statusFilter: DealStatus | DealStatus[] | undefined;
+
+    if (typeof req.query.status === 'string' && req.query.status.length > 0) {
+      // Comma-separated list, e.g. ?status=FUNDED,IN_PROGRESS
+      const tokens = req.query.status
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter((s) => s.length > 0);
+
+      const invalid = tokens.filter((t) => !ALL_STATUSES.includes(t as DealStatus));
+      if (invalid.length > 0) {
+        throw new ValidationError(
+          `Invalid status value(s): ${invalid.join(', ')}. Must be one of: ${ALL_STATUSES.join(', ')}`,
+        );
+      }
+      statusFilter = tokens.length === 1 ? (tokens[0] as DealStatus) : (tokens as DealStatus[]);
+    }
+
+    const deals = await listDeals(req.user!.id, req.user!.role, {
+      ...(statusFilter ? { status: statusFilter } : {}),
+    });
     res.json({ success: true, data: { deals } });
   } catch (error) {
     next(error);
