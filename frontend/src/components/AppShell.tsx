@@ -22,6 +22,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: '/', label: 'Dashboard', layoutId: 'nav-dashboard' },
   { to: '/deals', label: 'Deals', layoutId: 'nav-deals' },
+  { to: '/invitations', label: 'Invitations', layoutId: 'nav-invitations' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

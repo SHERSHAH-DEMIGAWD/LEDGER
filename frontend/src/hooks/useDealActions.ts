@@ -1,0 +1,171 @@
+/**
+ * hooks/useDealActions.ts
+ *
+ * Manages deal state transitions and the available-actions state machine.
+ *
+ * This hook is the authoritative source for:
+ * 1. What actions the current user can take (from GET /deals/:id/state)
+ * 2. How to perform each action (wraps POST /deals/:id/transition)
+ *
+ * It is a companion to `useDeal`, which loads the deal record itself.
+ * The page uses both hooks together.
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { dealApi } from '../services/dealApi';
+import type { DealAction } from '../types/api';
+import type { Deal } from '../types/deal';
+import type { BackendDealState } from '../types/api';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface ActionResult {
+  /** True if the action succeeded. */
+  success: boolean;
+  /** Human-readable result message to show in a toast. */
+  message: string;
+  /** Updated deal data, if the action returned a new state. */
+  updatedDeal?: Deal;
+  /** True when the transition was rejected because the deal state changed
+   *  concurrently. The caller should prompt the user to reload. */
+  isConflict?: boolean;
+}
+
+export interface UseDealActionsResult {
+  /** Actions the current user can take on this deal. */
+  availableActions: DealAction[];
+  /** True when the deal is in a terminal state (no further actions). */
+  isTerminal: boolean;
+  /** True when loading the available actions. */
+  loadingActions: boolean;
+  /** Error loading the available actions, if any. */
+  actionsError: string | null;
+  /**
+   * Perform a deal action.
+   * Handles the API call and returns a structured result the page can toast.
+   * On success, triggers a refetch of the deal data.
+   */
+  performAction: (
+    action: DealAction,
+    refetch: () => void
+  ) => Promise<ActionResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Action labels and icons
+// ---------------------------------------------------------------------------
+
+/** Human-readable labels for each DealAction. */
+export const ACTION_LABELS: Record<DealAction, string> = {
+  SUBMIT_FOR_ACCEPTANCE: 'Submit for Review',
+  ACCEPT: 'Accept Deal',
+  DECLINE: 'Decline',
+  FUND: 'Fund',
+  START: 'Start Work',
+  SUBMIT_DELIVERABLE: 'Submit Deliverable',
+  APPROVE: 'Approve',
+  REQUEST_REVISION: 'Request Revision',
+  RESUBMIT: 'Resubmit',
+  RAISE_DISPUTE: 'Raise Dispute',
+  RESOLVE: 'Resolve',
+  ACCEPT_RESOLUTION: 'Accept Resolution',
+  REQUEST_REWORK: 'Request Rework',
+  RELEASE_PAYMENT: 'Release Payment',
+  CANCEL: 'Cancel',
+};
+
+/** Action variant for the UI button — 'primary' | 'secondary' | 'danger' */
+export function actionVariant(action: DealAction): 'primary' | 'secondary' | 'danger' {
+  if (action === 'DECLINE' || action === 'CANCEL' || action === 'RAISE_DISPUTE') return 'danger';
+  if (action === 'REQUEST_REVISION' || action === 'REQUEST_REWORK' || action === 'RESUBMIT') return 'secondary';
+  return 'primary';
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
+
+export function useDealActions(dealId: string | undefined): UseDealActionsResult {
+  const [state, setState] = useState<BackendDealState | null>(null);
+  const [loadingActions, setLoadingActions] = useState(false);
+  const [actionsError, setActionsError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+
+  // Refetch the available actions when the dealId changes or after a transition
+  const refetchActions = useCallback(() => setTick((t) => t + 1), []);
+
+  useEffect(() => {
+    if (!dealId) {
+      setState(null);
+      setActionsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    // The guard above narrows dealId to string; non-null assertion is safe here.
+    // TypeScript does not propagate narrowing into async closures, so we assert.
+    const dealIdValue: string = dealId as string;
+
+    async function loadState() {
+      setLoadingActions(true);
+      setActionsError(null);
+      const result = await dealApi.getDealState(dealIdValue);
+
+      if (cancelled) return;
+
+      if (!result.ok) {
+        setActionsError(result.message);
+        setState(null);
+      } else {
+        setState(result.data);
+      }
+
+      setLoadingActions(false);
+    }
+
+    loadState();
+    return () => {
+      cancelled = true;
+    };
+  }, [dealId, tick]);
+
+  const performAction = useCallback(
+    async (action: DealAction, refetch: () => void): Promise<ActionResult> => {
+      if (!dealId) {
+        return { success: false, message: 'No deal selected.' };
+      }
+
+      const result = await dealApi.transitionDeal(dealId, action);
+
+      if (!result.ok) {
+        return {
+          success: false,
+          message: result.message,
+          isConflict: result.kind === 'conflict',
+        };
+      }
+
+      // Success — refresh the deal record and available actions
+      refetch();
+      refetchActions();
+
+      const label = ACTION_LABELS[action] ?? action;
+      return {
+        success: true,
+        message: `${label} — deal updated.`,
+        updatedDeal: result.data,
+      };
+    },
+    [dealId, refetchActions]
+  );
+
+  return {
+    availableActions: state?.availableActions ?? [],
+    isTerminal: state?.isTerminal ?? false,
+    loadingActions,
+    actionsError,
+    performAction,
+  };
+}

@@ -54,7 +54,7 @@ export function DealsPage() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const { deals, total, loading, error, refetch } = useDeals();
+  const { deals, loading, error, refetch } = useDeals();
   const reduced = useReducedMotion();
 
   const filtered = filterDeals(deals, activeFilter, searchQuery);

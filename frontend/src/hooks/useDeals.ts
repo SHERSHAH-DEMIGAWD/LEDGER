@@ -3,6 +3,11 @@
  *
  * Data hook for the deals list page.
  * Handles loading, error, and empty states — the page only renders content.
+ *
+ * The hook accepts `status` and `search` filter options and forwards them
+ * to the API client. When `VITE_USE_MOCK_DEALS=false`, the filters are
+ * applied server-side. When mock mode is on, the API client applies them
+ * locally on the mock dataset.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -13,6 +18,10 @@ import type { DealStatus } from '../types/dealStates';
 export interface UseDealsOptions {
   /** Fetch immediately on mount. Default true. */
   fetchOnMount?: boolean;
+  /** Server-side status filter. */
+  status?: DealStatus;
+  /** Server-side free-text search. */
+  search?: string;
 }
 
 export interface UseDealsResult {
@@ -26,7 +35,7 @@ export interface UseDealsResult {
 export function useDeals(
   options: UseDealsOptions = {}
 ): UseDealsResult {
-  const { fetchOnMount = true } = options;
+  const { fetchOnMount = true, status, search } = options;
 
   const [deals, setDeals] = useState<DealSummary[]>([]);
   const [total, setTotal] = useState(0);
@@ -45,7 +54,7 @@ export function useDeals(
       setLoading(true);
       setError(null);
       try {
-        const result = await dealApi.listDeals();
+        const result = await dealApi.listDeals({ status, search });
         if (!cancelled) {
           setDeals(result.deals);
           setTotal(result.total);
@@ -69,12 +78,17 @@ export function useDeals(
     return () => {
       cancelled = true;
     };
-  }, [tick, fetchOnMount]);
+  }, [tick, fetchOnMount, status, search]);
 
   return { deals, total, loading, error, refetch };
 }
 
-/** Filter helpers — used by pages, not hooks */
+/**
+ * Filter helpers — used by pages for client-side filter chips on top of
+ * server-filtered results. The hook now forwards the canonical status +
+ * search to the backend, so this is mostly used for tab grouping on the
+ * dashboard side.
+ */
 export function filterDeals(
   deals: DealSummary[],
   filter: string,

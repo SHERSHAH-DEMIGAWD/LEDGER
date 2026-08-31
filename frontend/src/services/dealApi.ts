@@ -16,14 +16,21 @@
  * real backend response so swapping implementations is frictionless.
  */
 
-import axios, { type AxiosInstance } from 'axios';
+import axios, { type AxiosInstance, type AxiosError } from 'axios';
 import type {
   Deal,
   DealListResponse,
-  DealResponse,
   DealSummary,
 } from '../types/deal';
+import type {
+  BackendDeal,
+  BackendDealState,
+  BackendDealHistoryEntry,
+  DealAction,
+} from '../types/api';
 import type { DealStatus } from '../types/dealStates';
+import { normalizeDeal, normalizeDealSummary, normalizeHistoryEntry } from './dealNormalizer';
+import { getAccessToken } from './auth';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -43,7 +50,7 @@ const API_BASE_URL =
 const MOCK_LATENCY_MS = 350;
 
 // ---------------------------------------------------------------------------
-// HTTP client (only constructed when not using mocks)
+// HTTP client
 // ---------------------------------------------------------------------------
 
 let httpClient: AxiosInstance | null = null;
@@ -59,6 +66,11 @@ function getHttpClient(): AxiosInstance {
     });
   }
   return httpClient;
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 // ---------------------------------------------------------------------------
@@ -278,19 +290,6 @@ function delay<T>(value: T, ms = MOCK_LATENCY_MS): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
 
-function toSummary(deal: Deal): DealSummary {
-  return {
-    id: deal.id,
-    title: deal.title,
-    amount: deal.amount,
-    amountFormatted: deal.amountFormatted,
-    counterparties: deal.counterparties,
-    status: deal.status,
-    updatedAt: deal.updatedAt,
-    updatedAtRelative: relativeTime(deal.updatedAt),
-  };
-}
-
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   const now = Date.now();
@@ -304,6 +303,19 @@ function relativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+function toSummary(deal: Deal): DealSummary {
+  return {
+    id: deal.id,
+    title: deal.title,
+    amount: deal.amount,
+    amountFormatted: deal.amountFormatted,
+    counterparties: deal.counterparties,
+    status: deal.status,
+    updatedAt: deal.updatedAt,
+    updatedAtRelative: relativeTime(deal.updatedAt),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // List options
 // ---------------------------------------------------------------------------
@@ -313,6 +325,66 @@ export interface ListDealsOptions {
   status?: DealStatus;
   /** Free-text search over title + counterparties. */
   search?: string;
+}
+
+// ---------------------------------------------------------------------------
+// API error handling
+// ---------------------------------------------------------------------------
+
+export interface ApiCallResult<T> {
+  ok: true;
+  data: T;
+}
+
+export interface ApiCallError {
+  ok: false;
+  kind: 'network' | 'auth' | 'forbidden' | 'validation' | 'conflict' | 'not_found' | 'server';
+  message: string;
+  /** Backend error code, e.g. 'DEAL_001', 'AUTH_011' */
+  code?: string;
+}
+
+export type ApiResult<T> = ApiCallResult<T> | ApiCallError;
+
+function isBackendErrorResponse(data: unknown): data is { success: false; error: { code: string; message: string } } {
+  return typeof data === 'object' && data !== null && 'success' in data && (data as { success: unknown }).success === false;
+}
+
+function mapAxiosError(err: AxiosError<unknown>): ApiCallError {
+  const status = err.response?.status;
+  const body = err.response?.data;
+
+  if (status === 401) {
+    return { ok: false, kind: 'auth', message: 'Authentication required. Please sign in.' };
+  }
+  if (status === 403) {
+    const code = isBackendErrorResponse(body) ? body.error.code : undefined;
+    return { ok: false, kind: 'forbidden', message: 'You do not have permission to perform this action.', code };
+  }
+  if (status === 404) {
+    return { ok: false, kind: 'not_found', message: 'Resource not found.' };
+  }
+  if (status === 409) {
+    return {
+      ok: false,
+      kind: 'conflict',
+      message: 'The deal was modified by another request. Please reload and try again.',
+      code: isBackendErrorResponse(body) ? body.error.code : undefined,
+    };
+  }
+  if (status === 400) {
+    const message = isBackendErrorResponse(body) ? body.error.message : err.message;
+    const code = isBackendErrorResponse(body) ? body.error.code : undefined;
+    // Distinguish validation from state-machine errors
+    if (code === 'DEAL_001') {
+      return { ok: false, kind: 'validation', message, code };
+    }
+    return { ok: false, kind: 'validation', message, code };
+  }
+  if (status && status >= 500) {
+    return { ok: false, kind: 'server', message: 'A server error occurred. Please try again later.' };
+  }
+  return { ok: false, kind: 'network', message: 'Network error. Please check your connection.' };
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +403,9 @@ export const dealApi = {
   /**
    * Fetch a list of deals (summaries).
    * Resolves with `{ deals, total }`. Throws on error.
+   *
+   * When USE_MOCK is false, forwards status + search to the backend.
+   * When USE_MOCK is true, applies filters locally on the mock dataset.
    */
   async listDeals(options: ListDealsOptions = {}): Promise<DealListResponse> {
     if (USE_MOCK) {
@@ -349,10 +424,23 @@ export const dealApi = {
       return delay({ deals, total: deals.length });
     }
 
-    const { data } = await getHttpClient().get<DealListResponse>('/deals', {
-      params: options,
+    const params: Record<string, string> = {};
+    if (options.status) params.status = options.status;
+    if (options.search) params.search = options.search;
+
+    const { data } = await getHttpClient().get<{
+      success: boolean;
+      data: { deals: BackendDeal[] };
+    }>('/deals', {
+      params,
+      headers: authHeaders(),
     });
-    return data;
+
+    const summaries = data.data.deals
+      .map(normalizeDealSummary)
+      .filter((d): d is DealSummary => d !== null);
+
+    return { deals: summaries, total: summaries.length };
   },
 
   /**
@@ -369,8 +457,168 @@ export const dealApi = {
       return delay(deal);
     }
 
-    const { data } = await getHttpClient().get<DealResponse>(`/deals/${id}`);
-    return data.deal;
+    const { data } = await getHttpClient().get<{
+      success: boolean;
+      data: { deal: BackendDeal };
+    }>(`/deals/${id}`, { headers: authHeaders() });
+
+    const normalized = normalizeDeal(data.data.deal);
+    if (!normalized) throw new Error(`Deal "${id}" not found`);
+    return normalized;
+  },
+
+  /**
+   * Fetch the current state of a deal, including available actions for the
+   * authenticated actor.
+   *
+   * Returns null on error (caller should handle gracefully).
+   */
+  async getDealState(id: string): Promise<ApiResult<BackendDealState>> {
+    if (USE_MOCK) {
+      // Mock: no action permissions in mock mode — return no actions
+      const deal = MOCK_DEALS.find((d) => d.id === id);
+      if (!deal) {
+        return { ok: false, kind: 'not_found', message: `Deal "${id}" not found` };
+      }
+      const TERMINAL = ['COMPLETED', 'DECLINED', 'CANCELLED'];
+      return {
+        ok: true,
+        data: {
+          dealId: id,
+          status: deal.status as DealStatus,
+          isTerminal: TERMINAL.includes(deal.status),
+          availableActions: [],
+          brandId: 'mock-brand',
+          creatorId: null,
+        },
+      };
+    }
+
+    try {
+      const { data } = await getHttpClient().get<{
+        success: boolean;
+        data: { state: BackendDealState };
+      }>(`/deals/${id}/state`, { headers: authHeaders() });
+      return { ok: true, data: data.data.state };
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        return mapAxiosError(err);
+      }
+      return { ok: false, kind: 'server', message: 'Unexpected error fetching deal state.' };
+    }
+  },
+
+  /**
+   * Perform a state transition on a deal.
+   *
+   * The backend validates the transition (state machine + authorization).
+   * Returns the updated normalized deal on success.
+   * Returns an error result on validation failure, auth failure, or conflict.
+   */
+  async transitionDeal(
+    id: string,
+    action: DealAction
+  ): Promise<ApiResult<Deal>> {
+    if (USE_MOCK) {
+      const deal = MOCK_DEALS.find((d) => d.id === id);
+      if (!deal) {
+        return { ok: false, kind: 'not_found', message: `Deal "${id}" not found` };
+      }
+      // Mock: no-op — just return the deal as-is
+      return { ok: true, data: deal };
+    }
+
+    try {
+      const { data } = await getHttpClient().post<{
+        success: boolean;
+        data: { deal: BackendDeal };
+      }>(
+        `/deals/${id}/transition`,
+        { action },
+        { headers: authHeaders() }
+      );
+      const normalized = normalizeDeal(data.data.deal);
+      if (!normalized) {
+        return { ok: false, kind: 'server', message: 'Failed to parse deal response.' };
+      }
+      return { ok: true, data: normalized };
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        return mapAxiosError(err);
+      }
+      return { ok: false, kind: 'server', message: 'Unexpected error performing action.' };
+    }
+  },
+
+  /**
+   * Invite a creator to a deal (DRAFT → PENDING_ACCEPTANCE).
+   *
+   * Returns the updated deal on success.
+   */
+  async inviteCreator(
+    dealId: string,
+    creatorId: string
+  ): Promise<ApiResult<Deal>> {
+    if (USE_MOCK) {
+      const deal = MOCK_DEALS.find((d) => d.id === dealId);
+      if (!deal) {
+        return { ok: false, kind: 'not_found', message: `Deal "${dealId}" not found` };
+      }
+      return { ok: true, data: deal };
+    }
+
+    try {
+      const { data } = await getHttpClient().post<{
+        success: boolean;
+        data: { deal: BackendDeal };
+      }>(
+        `/deals/${dealId}/invite`,
+        { creatorId },
+        { headers: authHeaders() }
+      );
+      const normalized = normalizeDeal(data.data.deal);
+      if (!normalized) {
+        return { ok: false, kind: 'server', message: 'Failed to parse deal response.' };
+      }
+      return { ok: true, data: normalized };
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        return mapAxiosError(err);
+      }
+      return { ok: false, kind: 'server', message: 'Unexpected error inviting creator.' };
+    }
+  },
+
+  /**
+   * Fetch the audit history for a deal.
+   *
+   * Returns null on error (caller should handle gracefully).
+   */
+  async getDealHistory(id: string): Promise<ApiResult<import('../types/deal').DealEvent[]>> {
+    if (USE_MOCK) {
+      const deal = MOCK_DEALS.find((d) => d.id === id);
+      if (!deal) {
+        return { ok: false, kind: 'not_found', message: `Deal "${id}" not found` };
+      }
+      return { ok: true, data: deal.events };
+    }
+
+    try {
+      const { data } = await getHttpClient().get<{
+        success: boolean;
+        data: { history: BackendDealHistoryEntry[] };
+      }>(`/deals/${id}/history`, { headers: authHeaders() });
+
+      return {
+        ok: true,
+        data: data.data.history.map(normalizeHistoryEntry),
+      };
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        return mapAxiosError(err);
+      }
+      return { ok: false, kind: 'server', message: 'Unexpected error fetching history.' };
+    }
   },
 };
 

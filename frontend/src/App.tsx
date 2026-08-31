@@ -16,6 +16,7 @@ import { AppShell } from './components/AppShell';
 import { DashboardPage } from './pages/DashboardPage';
 import { DealsPage } from './pages/DealsPage';
 import { DealDetailPage } from './pages/DealDetailPage';
+import { InvitationsPage } from './pages/InvitationsPage';
 
 function App() {
   const location = useLocation();
@@ -38,6 +39,7 @@ function App() {
             <Route path="/" element={<Page><DashboardPage /></Page>} />
             <Route path="/deals" element={<Page><DealsPage /></Page>} />
             <Route path="/deals/:id" element={<Page><DealDetailPage /></Page>} />
+            <Route path="/invitations" element={<Page><InvitationsPage /></Page>} />
             <Route
               path="*"
               element={
