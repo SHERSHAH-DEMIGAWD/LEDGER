@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { config } from './config.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { withMockUser } from './middleware/withMockUser.js';
 import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
 import dealRoutes from './routes/deal.routes.js';
@@ -44,6 +45,11 @@ app.use(express.json());
 
 // Cookie parsing for refresh tokens
 app.use(cookieParser());
+
+// Mock user injection (dev only). Reads X-Mock-User header and sets req.mockUser.
+// Per-route authenticate() calls are replaced with mockAwareAuth() which
+// honors this header. Safe in production: missing/invalid header is a no-op.
+app.use(withMockUser);
 
 // Health check
 app.get('/health', (_req, res) => {

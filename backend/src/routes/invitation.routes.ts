@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { mockAwareAuth } from '../middleware/mockAuth.js';
 import { listCreatorInvitations, transitionDeal } from '../services/DealService.js';
 import type { DealAction } from '../domain/state-machine/DealStateMachine.js';
 
@@ -14,7 +14,7 @@ const router = Router();
  *
  * Authorization: Any authenticated user. Non-creators get an empty array.
  */
-router.get('/', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', mockAwareAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const invitations = await listCreatorInvitations(
       req.user!.id,
@@ -40,7 +40,7 @@ router.get('/', authenticate, async (req: Request, res: Response, next: NextFunc
  */
 router.post(
   '/:id/accept',
-  authenticate,
+  mockAwareAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
@@ -69,7 +69,7 @@ router.post(
  */
 router.post(
   '/:id/decline',
-  authenticate,
+  mockAwareAuth,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;

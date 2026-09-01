@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { mockAwareAuth } from '../middleware/mockAuth.js';
 import { getUserById } from '../services/auth.service.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 
@@ -10,9 +10,9 @@ const router = Router();
  * Get current user information
  * Requires authentication
  */
-router.get('/me', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/me', mockAwareAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // req.user is set by authenticate middleware from verified JWT
+    // req.user is set by mockAwareAuth from verified JWT or mock header
     // Never trust client-provided user IDs
     const userId = req.user!.id;
 

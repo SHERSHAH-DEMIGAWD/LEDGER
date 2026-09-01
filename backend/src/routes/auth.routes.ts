@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { config } from '../config.js';
-import { authenticate } from '../middleware/auth.js';
+import { mockAwareAuth } from '../middleware/mockAuth.js';
 import { validate } from '../middleware/validate.js';
 import { authRateLimit, registerRateLimit } from '../middleware/rate-limit.js';
 import { register, login, verifyEmail, rotateRefreshToken, revokeRefreshToken, generateAccessToken } from '../services/auth.service.js';
@@ -72,7 +72,7 @@ router.post('/login', authRateLimit, validate(loginSchema), async (req: Request,
  * POST /auth/logout
  * Logout and revoke refresh token
  */
-router.post('/logout', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/logout', mockAwareAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
 

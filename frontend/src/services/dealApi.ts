@@ -16,7 +16,7 @@
  * real backend response so swapping implementations is frictionless.
  */
 
-import axios, { type AxiosInstance, type AxiosError } from 'axios';
+import axios, { type AxiosError } from 'axios';
 import type {
   Deal,
   DealListResponse,
@@ -30,7 +30,7 @@ import type {
 } from '../types/api';
 import type { DealStatus } from '../types/dealStates';
 import { normalizeDeal, normalizeDealSummary, normalizeHistoryEntry } from './dealNormalizer';
-import { getAccessToken } from './auth';
+import { getHttpClient } from './httpClient';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -38,10 +38,6 @@ import { getAccessToken } from './auth';
 
 /** When true, the client returns mock data. When false, it uses HTTP. */
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_DEALS !== 'false';
-
-/** Base URL for the real backend. Only used when USE_MOCK is false. */
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
 
 /**
  * Artificial latency for mock responses (ms). Keeps the UI honest about
@@ -52,26 +48,8 @@ const MOCK_LATENCY_MS = 350;
 // ---------------------------------------------------------------------------
 // HTTP client
 // ---------------------------------------------------------------------------
-
-let httpClient: AxiosInstance | null = null;
-
-function getHttpClient(): AxiosInstance {
-  if (!httpClient) {
-    httpClient = axios.create({
-      baseURL: API_BASE_URL,
-      timeout: 10_000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-  }
-  return httpClient;
-}
-
-function authHeaders(): Record<string, string> {
-  const token = getAccessToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+// The shared httpClient is imported from ./httpClient — it attaches the
+// Authorization and X-Mock-User headers automatically.
 
 // ---------------------------------------------------------------------------
 // Mock dataset
@@ -433,7 +411,6 @@ export const dealApi = {
       data: { deals: BackendDeal[] };
     }>('/deals', {
       params,
-      headers: authHeaders(),
     });
 
     const summaries = data.data.deals
@@ -460,7 +437,7 @@ export const dealApi = {
     const { data } = await getHttpClient().get<{
       success: boolean;
       data: { deal: BackendDeal };
-    }>(`/deals/${id}`, { headers: authHeaders() });
+    }>(`/deals/${id}`);
 
     const normalized = normalizeDeal(data.data.deal);
     if (!normalized) throw new Error(`Deal "${id}" not found`);
@@ -488,7 +465,7 @@ export const dealApi = {
           status: deal.status as DealStatus,
           isTerminal: TERMINAL.includes(deal.status),
           availableActions: [],
-          brandId: 'mock-brand',
+          brandId: '550e8400-e29b-41d4-a716-446655440001',
           creatorId: null,
         },
       };
@@ -498,7 +475,7 @@ export const dealApi = {
       const { data } = await getHttpClient().get<{
         success: boolean;
         data: { state: BackendDealState };
-      }>(`/deals/${id}/state`, { headers: authHeaders() });
+      }>(`/deals/${id}/state`);
       return { ok: true, data: data.data.state };
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -534,8 +511,7 @@ export const dealApi = {
         data: { deal: BackendDeal };
       }>(
         `/deals/${id}/transition`,
-        { action },
-        { headers: authHeaders() }
+        { action }
       );
       const normalized = normalizeDeal(data.data.deal);
       if (!normalized) {
@@ -573,8 +549,7 @@ export const dealApi = {
         data: { deal: BackendDeal };
       }>(
         `/deals/${dealId}/invite`,
-        { creatorId },
-        { headers: authHeaders() }
+        { creatorId }
       );
       const normalized = normalizeDeal(data.data.deal);
       if (!normalized) {
@@ -607,7 +582,7 @@ export const dealApi = {
       const { data } = await getHttpClient().get<{
         success: boolean;
         data: { history: BackendDealHistoryEntry[] };
-      }>(`/deals/${id}/history`, { headers: authHeaders() });
+      }>(`/deals/${id}/history`);
 
       return {
         ok: true,

@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { mockAwareAuth } from '../middleware/mockAuth.js';
 import { validate } from '../middleware/validate.js';
 import {
   createDeal,
@@ -43,7 +43,7 @@ const ALL_STATUSES: DealStatus[] = [
  * Optional query: `status` (single value or repeated for an IN list).
  * Unknown statuses return 400.
  */
-router.get('/', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', mockAwareAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     let statusFilter: DealStatus | DealStatus[] | undefined;
 
@@ -78,7 +78,7 @@ router.get('/', authenticate, async (req: Request, res: Response, next: NextFunc
  */
 router.post(
   '/',
-  authenticate,
+  mockAwareAuth,
   validate(createDealSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -101,7 +101,7 @@ router.post(
  */
 router.post(
   '/:id/invite',
-  authenticate,
+  mockAwareAuth,
   validate(inviteCreatorSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -123,7 +123,7 @@ router.post(
  * GET /deals/:id
  * Get a single deal (participant, HRT, or ADMIN).
  */
-router.get('/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', mockAwareAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const deal = await getDeal(id, req.user!.id, req.user!.role);
@@ -138,7 +138,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response, next: NextF
  * Get current state and available actions for a deal.
  * Powers the DealStateTimeline on the frontend.
  */
-router.get('/:id/state', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/state', mockAwareAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const state = await getDealState(id, req.user!.id, req.user!.role);
@@ -152,7 +152,7 @@ router.get('/:id/state', authenticate, async (req: Request, res: Response, next:
  * GET /deals/:id/history
  * Get audit history for a deal.
  */
-router.get('/:id/history', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/history', mockAwareAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const history = await getDealHistory(id, req.user!.id, req.user!.role);
@@ -178,7 +178,7 @@ router.get('/:id/history', authenticate, async (req: Request, res: Response, nex
  */
 router.post(
   '/:id/transition',
-  authenticate,
+  mockAwareAuth,
   validate(transitionDealSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

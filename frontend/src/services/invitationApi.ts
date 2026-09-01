@@ -12,9 +12,9 @@
  * Mock data is used when VITE_USE_MOCK_DEALS !== 'false'.
  */
 
-import axios, { type AxiosInstance, type AxiosError } from 'axios';
+import axios, { type AxiosError } from 'axios';
 import type { BackendInvitation } from '../types/api';
-import { getAccessToken } from './auth';
+import { getHttpClient } from './httpClient';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -23,33 +23,12 @@ import { getAccessToken } from './auth';
 /** When true, the client returns mock data. When false, it uses HTTP. */
 const USE_MOCK = import.meta.env.VITE_USE_MOCK_DEALS !== 'false';
 
-/** Base URL for the real backend. Only used when USE_MOCK is false. */
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
-
 const MOCK_LATENCY_MS = 300;
 
 // ---------------------------------------------------------------------------
 // HTTP client
 // ---------------------------------------------------------------------------
-
-let httpClient: AxiosInstance | null = null;
-
-function getHttpClient(): AxiosInstance {
-  if (!httpClient) {
-    httpClient = axios.create({
-      baseURL: API_BASE_URL,
-      timeout: 10_000,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-  return httpClient;
-}
-
-function authHeaders(): Record<string, string> {
-  const token = getAccessToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+// The shared httpClient from ./httpClient attaches auth headers automatically.
 
 // ---------------------------------------------------------------------------
 // Mock invitations
@@ -262,7 +241,7 @@ export const invitationApi = {
     const { data } = await getHttpClient().get<{
       success: boolean;
       data: { invitations: BackendInvitation[] };
-    }>('/invitations', { headers: authHeaders() });
+    }>('/invitations');
 
     return data.data.invitations.map(normalizeInvitation);
   },
@@ -283,7 +262,6 @@ export const invitationApi = {
       await getHttpClient().post(
         `/invitations/${encodeURIComponent(id)}/accept`,
         {},
-        { headers: authHeaders() },
       );
       return { ok: true, data: undefined };
     } catch (err) {
@@ -314,7 +292,6 @@ export const invitationApi = {
       await getHttpClient().post(
         `/invitations/${encodeURIComponent(id)}/decline`,
         {},
-        { headers: authHeaders() },
       );
       return { ok: true, data: undefined };
     } catch (err) {
