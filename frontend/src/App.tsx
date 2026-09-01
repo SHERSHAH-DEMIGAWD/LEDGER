@@ -51,10 +51,12 @@ function AnimatedRouteWrapper({ children }: { children: React.ReactNode }) {
   // Determine animation axes based on direction
   const getInitial = () => {
     if (reduced) return { opacity: 0 };
-    if (direction === 'up') return { opacity: 0, y: 40 };
-    if (direction === 'down') return { opacity: 0, y: -40 };
-    // Default horizontal: forward nav comes from right
-    return { opacity: 0, x: 32 };
+    if (direction === 'next-record' || direction === 'up') return { opacity: 0, y: 80 };
+    if (direction === 'prev-record' || direction === 'down') return { opacity: 0, y: -80 };
+    if (direction === 'backward') return { opacity: 0, x: -60 };
+    if (direction === 'forward') return { opacity: 0, x: 60 };
+    // Default horizontal
+    return { opacity: 0, x: 40 };
   };
 
   const getAnimate = () => {
@@ -64,10 +66,12 @@ function AnimatedRouteWrapper({ children }: { children: React.ReactNode }) {
 
   const getExit = () => {
     if (reduced) return { opacity: 0 };
-    if (direction === 'up') return { opacity: 0, y: -40 };
-    if (direction === 'down') return { opacity: 0, y: 40 };
-    // Default horizontal: exiting page goes left
-    return { opacity: 0, x: -32 };
+    if (direction === 'next-record' || direction === 'up') return { opacity: 0, y: -80 };
+    if (direction === 'prev-record' || direction === 'down') return { opacity: 0, y: 80 };
+    if (direction === 'backward') return { opacity: 0, x: 60 };
+    if (direction === 'forward') return { opacity: 0, x: -60 };
+    // Default horizontal
+    return { opacity: 0, x: -40 };
   };
 
   const handleAnimationComplete = () => {

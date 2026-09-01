@@ -23,18 +23,19 @@ import {
   type ReactNode,
 } from 'react';
 
-/** 'up' = ArrowDown (next deal), 'down' = ArrowUp (previous deal) */
-export type DealNavDirection = 'up' | 'down' | 'none';
+/**
+ * Navigation intent types:
+ *   - 'forward': Register -> Deal (enters from right, leaves left)
+ *   - 'backward': Deal -> Register (enters from left, leaves right)
+ *   - 'next-record': Deal N -> Deal N+1 (leaves up, enters from below)
+ *   - 'prev-record': Deal N -> Deal N-1 (leaves down, enters from above)
+ *   - 'none': Default fallback transition
+ */
+export type DealNavDirection = 'forward' | 'backward' | 'next-record' | 'prev-record' | 'up' | 'down' | 'none';
 
 interface DealNavigationValue {
   direction: DealNavDirection;
-  /**
-   * Call this when navigating from one deal to another.
-   * Pass 'up' when going to the next deal, 'down' when going to the previous.
-   * The direction is reset to 'none' after the transition completes.
-   */
   recordNavigation: (dir: DealNavDirection) => void;
-  /** Reset direction to 'none' (e.g., when transition ends) */
   resetDirection: () => void;
 }
 

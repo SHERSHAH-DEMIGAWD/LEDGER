@@ -1,22 +1,21 @@
 /**
  * pages/DealDetailPage.tsx
  *
- * Casebook document view for a single deal record.
+ * Casebook Contractual Record View (Reference Image 2).
  *
- * The deal record is presented as an official ledger document:
- * - Record header with formal parties register
- * - Numbered document sections separated by thin rules
- * - Institutional status stamp
- * - Archival activity log
- *
- * All state values come from the authoritative backend.
+ * Rendered as an open physical casebook page:
+ *   - Left binding seam shadow
+ *   - Right edge paper-stack depth effect
+ *   - Protruding right-hand bookmark navigation tabs
+ *   - Ceremonial Embossed Wax Seal
+ *   - Header: ← BACK TO REGISTER, RECORD NO. 001, CREATED / LAST UPDATED
+ *   - 2-Column Document Grid: Articles (Scope, Documents, Parties) + Record History Timeline
+ *   - Top Right Navigation: ▲ PREVIOUS | NEXT ▼
  */
 
-import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { DealTimeline } from '../motion/DealTimeline';
-import { DealStateTimeline } from '../motion/DealStateTimeline';
 import { Modal, Drawer } from '../motion/components';
 import { Button } from '../components/ui';
 import { DealStateBadge } from '../components/DealStateBadge';
@@ -29,14 +28,8 @@ import { useReducedMotion } from '../motion/hooks';
 import { duration, easing } from '../motion/variants';
 import { getDealStateConfig } from '../types/dealStates';
 import { useDealNavigation } from '../contexts/DealNavigationContext';
-import type { DealDocument, DealParty, DealEvent } from '../types/deal';
-import type { TimelineStep } from '../motion/DealTimeline';
-import type { Status } from '../motion/StatusBadge';
+import type { DealEvent } from '../types/deal';
 import type { DealAction } from '../types/api';
-
-// ---------------------------------------------------------------------------
-// Toast — institutional, no SaaS colours
-// ---------------------------------------------------------------------------
 
 interface Toast {
   id: string;
@@ -76,7 +69,7 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
               transition={{ duration: 0.2, ease: easing.out }}
               style={{
                 pointerEvents: 'all',
-                background: 'var(--color-parchment-warm)',
+                background: 'var(--color-parchment-cream)',
                 border: `1px solid ${s.border}`,
                 borderLeft: `3px solid ${s.accent}`,
                 padding: 'var(--space-3) var(--space-4)',
@@ -85,7 +78,7 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
                 gap: 'var(--space-3)',
                 minWidth: 280,
                 maxWidth: 360,
-                boxShadow: 'var(--shadow-sm)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
               }}
             >
               <div
@@ -98,7 +91,7 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
                   flexShrink: 0,
                 }}
               />
-              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', flex: 1, lineHeight: 1.5 }}>
+              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-primary)', flex: 1, lineHeight: 1.5 }}>
                 {toast.message}
               </span>
               <button
@@ -107,7 +100,7 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer',
-                  color: 'var(--color-text-tertiary)',
+                  color: 'var(--color-ink-muted)',
                   fontSize: 16,
                   lineHeight: 1,
                   padding: '2px 4px',
@@ -125,66 +118,6 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
   );
 }
 
-// ---------------------------------------------------------------------------
-// Document section primitive — ruled section, no card wrapper
-// ---------------------------------------------------------------------------
-
-function DocSection({
-  number,
-  label,
-  children,
-}: {
-  number: string;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      style={{
-        borderBottom: '1px solid var(--color-border)',
-        paddingBottom: 'var(--space-6)',
-        paddingTop: 'var(--space-6)',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: 'var(--space-3)',
-          marginBottom: 'var(--space-4)',
-        }}
-      >
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--text-xs)',
-            color: 'var(--color-text-faint)',
-            letterSpacing: '0.06em',
-          }}
-        >
-          {number}
-        </span>
-        <span
-          style={{
-            fontSize: 'var(--text-xs)',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.12em',
-            color: 'var(--color-text-tertiary)',
-          }}
-        >
-          {label}
-        </span>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main page component
-// ---------------------------------------------------------------------------
-
 export function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { deal, loading, error, notFound, refetch } = useDeal(id);
@@ -193,42 +126,38 @@ export function DealDetailPage() {
   const { recordNavigation } = useDealNavigation();
   const navigate = useNavigate();
 
-  // History from the dedicated /history endpoint
   const [historyEvents, setHistoryEvents] = useState<DealEvent[] | null>(null);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  // Incremented after a successful state transition so history re-fetches
   const [historyTick, setHistoryTick] = useState(0);
-
-  // Toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
-
-  // UI state
   const [modalOpen, setModalOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [actionInFlight, setActionInFlight] = useState<DealAction | null>(null);
   const reduced = useReducedMotion();
 
-  // Deal-to-deal navigation: find current index and neighbors
   const currentIndex = id ? allDeals.findIndex((d) => d.id === id) : -1;
   const hasNext = currentIndex >= 0 && currentIndex < allDeals.length - 1;
   const hasPrev = currentIndex > 0;
   const nextDeal = hasNext ? allDeals[currentIndex + 1] : null;
   const prevDeal = hasPrev ? allDeals[currentIndex - 1] : null;
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     if (!nextDeal) return;
-    recordNavigation('up');
+    recordNavigation('next-record');
     navigate(`/deals/${nextDeal.id}`);
-  };
+  }, [nextDeal, recordNavigation, navigate]);
 
-  const goToPrev = () => {
+  const goToPrev = useCallback(() => {
     if (!prevDeal) return;
-    recordNavigation('down');
+    recordNavigation('prev-record');
     navigate(`/deals/${prevDeal.id}`);
+  }, [prevDeal, recordNavigation, navigate]);
+
+  const backToRegister = () => {
+    recordNavigation('backward');
+    navigate('/');
   };
 
-  // Keyboard navigation: ArrowDown → next, ArrowUp → previous
-  // Skip when typing in inputs or when modals are open
+  // Keyboard navigation
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (modalOpen || drawerOpen) return;
@@ -237,6 +166,7 @@ export function DealDetailPage() {
         target &&
         (target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
           target.isContentEditable)
       ) {
         return;
@@ -251,45 +181,64 @@ export function DealDetailPage() {
     }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasNext, hasPrev, nextDeal, prevDeal, modalOpen, drawerOpen]);
+  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen]);
 
-  // Load history when deal id is available
+  // Scoped Wheel Navigation
   useEffect(() => {
-    if (!id) return;
+    let isThrottled = false;
 
-    let cancelled = false;
-    setHistoryEvents(null);
-    setHistoryError(null);
-    // TypeScript does not propagate narrowing into async closures — safe assertion
-    const dealId: string = id as string;
+    function handleWheel(e: WheelEvent) {
+      if (modalOpen || drawerOpen || isThrottled) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.tagName === 'BUTTON' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
 
-    async function loadHistory() {
-      const result = await dealApi.getDealHistory(dealId);
-      if (cancelled) return;
+      const mainEl = document.querySelector('main');
+      if (!mainEl) return;
 
-      if (!result.ok) {
-        // Non-critical — fall back to events from deal record
-        setHistoryError(result.message);
-      } else {
-        setHistoryEvents(result.data);
+      const isAtBottom = mainEl.scrollHeight - mainEl.scrollTop <= mainEl.clientHeight + 10;
+      const isAtTop = mainEl.scrollTop <= 10;
+
+      if (e.deltaY > 80 && isAtBottom && hasNext) {
+        isThrottled = true;
+        goToNext();
+        setTimeout(() => { isThrottled = false; }, 900);
+      } else if (e.deltaY < -80 && isAtTop && hasPrev) {
+        isThrottled = true;
+        goToPrev();
+        setTimeout(() => { isThrottled = false; }, 900);
       }
     }
 
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    async function loadHistory() {
+      const result = await dealApi.getDealHistory(id as string);
+      if (!cancelled && result.ok) {
+        setHistoryEvents(result.data);
+      }
+    }
     loadHistory();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [id, historyTick]);
 
   const addToast = (message: string, kind: Toast['kind'] = 'success') => {
-    const id = `toast-${Date.now()}-${Math.random()}`;
-    setToasts((prev) => [...prev, { id, message, kind }]);
-    setTimeout(() => dismissToast(id), 5000);
-  };
-
-  const dismissToast = (toastId: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== toastId));
+    const toastId = `toast-${Date.now()}`;
+    setToasts((prev) => [...prev, { id: toastId, message, kind }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), 5000);
   };
 
   const handleAction = async (action: DealAction) => {
@@ -298,7 +247,6 @@ export function DealDetailPage() {
       const result = await performAction(action, refetch);
       if (result.success) {
         addToast(result.message, 'success');
-        // Refresh history so the new event appears immediately
         setHistoryTick((t) => t + 1);
       } else {
         addToast(result.message, result.isConflict ? 'conflict' : 'error');
@@ -308,776 +256,551 @@ export function DealDetailPage() {
     }
   };
 
-  // Not found
   if (!loading && notFound) {
     return (
-      <div style={{ maxWidth: 'var(--layout-max-width)', margin: '0 auto', padding: 'var(--space-7) var(--space-5)' }}>
-        <Link
-          to="/deals"
-          style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', textDecoration: 'none' }}
-        >
-          ← Record Index
-        </Link>
-        <EmptyState
-          title="Record not found"
-          description={`No record bearing identifier "${id}" exists in this archive.`}
-          action={
-            <Link to="/deals" style={{ textDecoration: 'none' }}>
-              <Button size="sm" variant="secondary">← Return to Record Index</Button>
-            </Link>
-          }
-        />
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: 'var(--space-7) var(--space-5)' }}>
+        <button onClick={backToRegister} style={{ color: 'var(--color-ink-muted)', cursor: 'pointer', fontSize: 'var(--text-sm)' }}>
+          ← Back to Register
+        </button>
+        <EmptyState title="Record Not Found" description={`No record matching ID "${id}" exists in this archive.`} />
       </div>
     );
   }
 
-  // Loading
-  if (loading) {
-    return (
-      <>
-        <DealDetailSkeleton />
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
-    );
-  }
-
-  // Error
-  if (error) {
-    return (
-      <>
-        <div style={{ maxWidth: 'var(--layout-max-width)', margin: '0 auto', padding: 'var(--space-7) var(--space-5)' }}>
-          <Link
-            to="/deals"
-            style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-6)', textDecoration: 'none' }}
-          >
-            ← Record Index
-          </Link>
-          <ErrorState title="Record access interrupted" message={error} onRetry={refetch} />
-        </div>
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
-    );
-  }
-
-  // Should be impossible — loading=false with deal=null = notFound, caught above
-  if (!deal) return null;
+  if (loading) return <DealDetailSkeleton />;
+  if (error || !deal) return <ErrorState message={error || 'Failed to load record'} onRetry={refetch} />;
 
   const statusConfig = getDealStateConfig(deal.status);
+  const brandParty = deal.parties.find((p) => p.role.toLowerCase().includes('brand')) || deal.parties[0];
+  const creatorParty = deal.parties.find((p) => p.role.toLowerCase().includes('creator')) || deal.parties[1] || deal.parties[0];
 
-  // Decide what events to show: history API takes priority, fall back to deal.events
-  const eventsToShow: DealEvent[] =
-    historyEvents !== null
-      ? historyEvents
-      : deal.events;
-
-  const timelineSteps = eventsToShow.map(eventToStep);
-  const latestEventId =
-    eventsToShow.length > 0 ? eventsToShow[eventsToShow.length - 1].id : undefined;
+  const eventsToShow = historyEvents !== null ? historyEvents : deal.events;
+  const formattedRecordNo = String(currentIndex >= 0 ? currentIndex + 1 : 1).padStart(3, '0');
 
   return (
-    <>
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    <div
+      style={{
+        minHeight: '100vh',
+        background: '#120e0b',
+        padding: 'var(--space-5) var(--space-6) var(--space-8)',
+        color: 'var(--color-ink-primary)',
+        position: 'relative',
+      }}
+    >
+      <ToastContainer toasts={toasts} onDismiss={(tId) => setToasts((prev) => prev.filter((t) => t.id !== tId))} />
 
-      {/* Record document — parchment surface, document-width */}
-      <div
-        style={{
-          maxWidth: 860,
-          margin: '0 auto',
-          padding: 'var(--space-7) var(--space-6) var(--space-8)',
-        }}
-      >
-        {/* Back link */}
+      <div style={{ maxWidth: 960, margin: '0 auto', position: 'relative' }}>
+        {/* Protruding Right Bookmarks (REFERENCE IMAGE 2) */}
         <div
           style={{
+            position: 'absolute',
+            right: -52,
+            top: 60,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 'var(--space-6)',
-            flexWrap: 'wrap',
-            gap: 'var(--space-3)',
+            flexDirection: 'column',
+            gap: 12,
+            zIndex: 30,
           }}
         >
-          <Link
-            to="/deals"
-            style={{
-              fontSize: 'var(--text-sm)',
-              color: 'var(--color-text-tertiary)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 'var(--space-2)',
-              textDecoration: 'none',
-            }}
-          >
-            ← Record Index
-          </Link>
-
-          {/* Deal-to-deal navigation */}
-          {(hasPrev || hasNext) && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--color-text-faint)',
-              }}
-              aria-label="Deal navigation"
-            >
-              <span style={{ textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                Records
-              </span>
-              <button
-                onClick={goToPrev}
-                disabled={!hasPrev}
-                aria-label="Previous record"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 24,
-                  height: 24,
-                  background: 'transparent',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-xs)',
-                  cursor: hasPrev ? 'pointer' : 'not-allowed',
-                  opacity: hasPrev ? 1 : 0.4,
-                  color: 'var(--color-text-secondary)',
-                  fontSize: 14,
-                  lineHeight: 1,
-                  padding: 0,
-                }}
-                title="Previous record (ArrowUp)"
-              >
-                ↑
-              </button>
-              <span
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  letterSpacing: '0.04em',
-                  minWidth: 60,
-                  textAlign: 'center',
-                }}
-              >
-                {currentIndex >= 0 ? `${currentIndex + 1} / ${allDeals.length}` : '— / —'}
-              </span>
-              <button
-                onClick={goToNext}
-                disabled={!hasNext}
-                aria-label="Next record"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 24,
-                  height: 24,
-                  background: 'transparent',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-xs)',
-                  cursor: hasNext ? 'pointer' : 'not-allowed',
-                  opacity: hasNext ? 1 : 0.4,
-                  color: 'var(--color-text-secondary)',
-                  fontSize: 14,
-                  lineHeight: 1,
-                  padding: 0,
-                }}
-                title="Next record (ArrowDown)"
-              >
-                ↓
-              </button>
-            </div>
-          )}
+          <button className="bookmark-tab">Overview</button>
+          <button className="bookmark-tab">Deliverables</button>
+          <button className="bookmark-tab">Payments</button>
+          <button className="bookmark-tab">Files</button>
+          <button className="bookmark-tab" onClick={() => setDrawerOpen(true)}>History</button>
         </div>
 
-        {/* ─── RECORD HEADER ─────────────────────────────────────── */}
-        <motion.header
-          initial={reduced ? { opacity: 0 } : { opacity: 0, y: 10 }}
+        {/* ─── PHYSICAL OPEN CASEBOOK PAGE (REFERENCE IMAGE 2) ────────────── */}
+        <motion.div
+          className="paper-stack-effect"
+          initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: duration.normal, ease: easing.out }}
+          style={{
+            background: 'var(--color-parchment-cream)',
+            border: '1px solid #c8bda8',
+            borderRadius: '2px 4px 4px 2px',
+            padding: 'var(--space-6) var(--space-7)',
+            position: 'relative',
+          }}
         >
-          {/* Ledger mark + record number */}
+          {/* Left Book Binding Seam Gradient */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              width: 24,
+              background: 'linear-gradient(to right, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.04) 40%, transparent 100%)',
+              pointerEvents: 'none',
+            }}
+          />
+
+          {/* ─── TOP CONTROL BAR ─────────────────────────────────────────── */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              marginBottom: 'var(--space-4)',
+              marginBottom: 'var(--space-6)',
+              paddingBottom: 'var(--space-3)',
+              borderBottom: '1px solid #c9bfb0',
+              fontSize: 'var(--text-xs)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-              {/* Ledger seal icon */}
-              <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden>
-                <circle cx="16" cy="16" r="14" stroke="var(--color-gold)" strokeWidth="1" opacity="0.5" />
-                <rect x="7" y="9" width="18" height="14" rx="1" stroke="var(--color-gold)" strokeWidth="1.2" fill="none" />
-                <line x1="7" y1="14" x2="25" y2="14" stroke="var(--color-gold)" strokeWidth="0.75" opacity="0.6" />
-                <line x1="11" y1="18" x2="21" y2="18" stroke="var(--color-gold)" strokeWidth="0.75" opacity="0.5" />
-                <line x1="11" y1="21" x2="19" y2="21" stroke="var(--color-gold)" strokeWidth="0.75" opacity="0.4" />
+            <button
+              onClick={backToRegister}
+              style={{
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--color-ink-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              ← BACK TO REGISTER
+            </button>
+
+            {/* Top-Right Navigation: ▲ PREVIOUS | NEXT ▼ */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+              <button
+                onClick={goToPrev}
+                disabled={!hasPrev}
+                style={{
+                  opacity: hasPrev ? 1 : 0.35,
+                  cursor: hasPrev ? 'pointer' : 'not-allowed',
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--color-ink-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                ▲ PREVIOUS
+              </button>
+              <button
+                onClick={goToNext}
+                disabled={!hasNext}
+                style={{
+                  opacity: hasNext ? 1 : 0.35,
+                  cursor: hasNext ? 'pointer' : 'not-allowed',
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--color-ink-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                NEXT ▼
+              </button>
+              <button
+                onClick={() => setModalOpen(true)}
+                style={{ fontSize: 16, color: 'var(--color-ink-muted)', cursor: 'pointer' }}
+                title="Options"
+              >
+                ⋮
+              </button>
+            </div>
+          </div>
+
+          {/* ─── RECORD HEADER & TITLE BLOCK ────────────────────────────── */}
+          <div style={{ position: 'relative', marginBottom: 'var(--space-6)' }}>
+            {/* Ceremonial Wax Seal Stamp Top Right */}
+            <div
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                width: 72,
+                height: 72,
+                borderRadius: '50%',
+                border: '1.5px solid #8b6508',
+                background: 'radial-gradient(circle, rgba(139,101,8,0.12) 0%, rgba(139,101,8,0.03) 100%)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: 0.8,
+                transform: 'rotate(-6deg)',
+                pointerEvents: 'none',
+              }}
+            >
+              <span style={{ fontSize: 6, fontWeight: 700, letterSpacing: '0.12em', color: '#8b6508', textTransform: 'uppercase' }}>
+                VERITAS
+              </span>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="#8b6508" strokeWidth="0.8" opacity="0.6" />
+                <path d="M6 18V10L12 6L18 10V18" stroke="#8b6508" strokeWidth="1.2" />
+                <line x1="9" y1="13" x2="15" y2="13" stroke="#8b6508" strokeWidth="0.8" />
               </svg>
+              <span style={{ fontSize: 5, fontWeight: 700, letterSpacing: '0.1em', color: '#8b6508', textTransform: 'uppercase' }}>
+                PACTA SERVANDA
+              </span>
+            </div>
+
+            {/* Record No & Dates */}
+            <div style={{ display: 'flex', gap: 'var(--space-6)', marginBottom: 'var(--space-3)' }}>
               <div>
-                <div
-                  style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 'var(--text-sm)',
-                    fontWeight: 600,
-                    color: 'var(--color-text-primary)',
-                    letterSpacing: '-0.01em',
-                    lineHeight: 1.1,
-                  }}
-                >
-                  Ledger
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-ink-muted)' }}>
+                  RECORD NO.
                 </div>
-                <div
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.16em',
-                    color: 'var(--color-text-faint)',
-                    marginTop: 1,
-                  }}
-                >
-                  Record Authority
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', fontWeight: 700, lineHeight: 1.1 }}>
+                  {formattedRecordNo}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-ink-muted)' }}>
+                  CREATED
+                </div>
+                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, marginTop: 4 }}>
+                  {formatDateShort(deal.createdAt)}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-ink-muted)' }}>
+                  LAST UPDATED
+                </div>
+                <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, marginTop: 4 }}>
+                  {formatDateShort(deal.updatedAt)}
                 </div>
               </div>
             </div>
 
-            {/* Record number */}
-            <span
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--color-ink-muted)', marginBottom: 2 }}>
+              {deal.dealType?.toUpperCase() || 'CREATOR PARTNERSHIP AGREEMENT'}
+            </div>
+
+            {/* Main Title */}
+            <h1
               style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--color-text-faint)',
-                letterSpacing: '0.06em',
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(24px, 3.5vw, 36px)',
+                fontWeight: 600,
+                margin: '0 0 var(--space-5)',
+                lineHeight: 1.15,
+                color: 'var(--color-ink-primary)',
               }}
             >
-              #{deal.id.slice(0, 8).toUpperCase()}
-            </span>
+              {deal.title}
+            </h1>
+
+            {/* Parties Register Display */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 30px 1fr',
+                alignItems: 'center',
+                padding: 'var(--space-3) var(--space-4)',
+                background: 'var(--color-parchment-warm)',
+                border: '1px solid #c4b396',
+                borderRadius: 2,
+                marginBottom: 'var(--space-4)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-ink-muted)' }}>
+                  {brandParty?.role?.toUpperCase() || 'BRAND'}
+                </div>
+                <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: 'var(--color-ink-primary)' }}>
+                  {brandParty?.name || 'Brand Entity'}
+                </div>
+                {brandParty?.email && <div style={{ fontSize: 10, color: 'var(--color-ink-muted)' }}>{brandParty.email}</div>}
+              </div>
+              <div style={{ textAlign: 'center', fontSize: 14, color: 'var(--color-ink-muted)' }}>✕</div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--color-ink-muted)' }}>
+                  {creatorParty?.role?.toUpperCase() || 'CREATOR'}
+                </div>
+                <div style={{ fontSize: 'var(--text-md)', fontWeight: 700, color: 'var(--color-ink-primary)' }}>
+                  {creatorParty?.name || 'Creator'}
+                </div>
+                {creatorParty?.email && <div style={{ fontSize: 10, color: 'var(--color-ink-muted)' }}>{creatorParty.email}</div>}
+              </div>
+            </div>
+
+            {/* Metadata Bar */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: 'var(--space-2)',
+                padding: 'var(--space-3) 0',
+                borderTop: '1px solid #c9bfb0',
+                borderBottom: '1px solid #c9bfb0',
+                fontSize: 'var(--text-xs)',
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-ink-muted)' }}>
+                  STATUS
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <DealStateBadge status={deal.status} size="sm" />
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-ink-muted)' }}>
+                  VALUE
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 'var(--text-sm)', marginTop: 4 }}>
+                  {deal.amountFormatted}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-ink-muted)' }}>
+                  EFFECTIVE DATE
+                </div>
+                <div style={{ fontWeight: 700, marginTop: 4 }}>{formatDateShort(deal.createdAt)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--color-ink-muted)' }}>
+                  DUE / CLOSE
+                </div>
+                <div style={{ fontWeight: 700, marginTop: 4 }}>
+                  {deal.dueDate ? formatDateShort(deal.dueDate) : deal.closeDate ? formatDateShort(deal.closeDate) : '—'}
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Top rule */}
-          <div style={{ borderTop: '1px solid var(--color-border-strong)', marginBottom: 'var(--space-5)' }} />
-
-          {/* Deal title — serif, editorial */}
-          <motion.h1
-            layoutId={`deal-title-${deal.id}`}
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(22px, 4vw, 34px)',
-              fontWeight: 600,
-              color: 'var(--color-text-primary)',
-              lineHeight: 1.15,
-              letterSpacing: '-0.02em',
-              margin: '0 0 var(--space-5)',
-            }}
-          >
-            {deal.title}
-          </motion.h1>
-
-          {/* Parties register — formal ledger grid */}
+          {/* ─── TWO-COLUMN CONTENT GRID ─────────────────────────────────── */}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: deal.parties.length > 1
-                ? `repeat(${Math.min(deal.parties.length, 2)}, 1fr)`
-                : '1fr',
-              border: '1px solid var(--color-border-strong)',
-              marginBottom: 'var(--space-5)',
+              gridTemplateColumns: '1.6fr 1fr',
+              gap: 'var(--space-7)',
             }}
           >
-            {deal.parties.map((party, i) => (
-              <div
-                key={party.id}
-                style={{
-                  padding: 'var(--space-3) var(--space-4)',
-                  borderRight: i < deal.parties.length - 1 ? '1px solid var(--color-border-strong)' : 'none',
-                  background: i % 2 === 0 ? 'var(--color-parchment-warm)' : 'var(--color-parchment-cream)',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.14em',
-                    color: 'var(--color-text-faint)',
-                    marginBottom: 2,
-                  }}
-                >
-                  {party.role}
-                </div>
-                <div
-                  style={{
-                    fontSize: 'var(--text-sm)',
-                    fontWeight: 500,
-                    color: 'var(--color-text-primary)',
-                    marginBottom: 2,
-                  }}
-                >
-                  {party.name}
-                </div>
-                {party.email && (
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>
-                    {party.email}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Metadata row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-5)', flexWrap: 'wrap' }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--text-xl)',
-                fontWeight: 600,
-                color: 'var(--color-text-primary)',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              {deal.amountFormatted}
-            </span>
-            {deal.dealType && (
-              <span
-                style={{
-                  fontSize: 'var(--text-sm)',
-                  color: 'var(--color-text-tertiary)',
-                  padding: '3px 8px',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-xs)',
-                }}
-              >
-                {deal.dealType}
-              </span>
-            )}
-            <div style={{ marginLeft: 'auto' }}>
-              <DealStateBadge layoutId={`deal-status-${deal.id}`} status={deal.status} size="md" />
-            </div>
-          </div>
-
-          {/* Bottom rule */}
-          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 'var(--space-5)' }} />
-        </motion.header>
-
-        {/* ─── DOCUMENT BODY — numbered sections ─────────────────── */}
-        <div>
-
-          {/* 01 — Record Description */}
-          <DocSection number="01" label="Record Description">
-            <p
-              style={{
-                fontSize: 'var(--text-md)',
-                color: 'var(--color-text-secondary)',
-                lineHeight: 1.75,
-                margin: 0,
-                maxWidth: 680,
-              }}
-            >
-              {deal.description}
-            </p>
-          </DocSection>
-
-          {/* 02 — Parties */}
-          <DocSection number="02" label="Parties to this Record">
+            {/* Left Column: Articles */}
             <div>
-              {deal.parties.map((party) => (
-                <PartyRow key={party.id} party={party} />
-              ))}
-            </div>
-          </DocSection>
+              {/* ARTICLE I: SCOPE */}
+              <section style={{ marginBottom: 'var(--space-6)' }}>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-ink-muted)', marginBottom: 4 }}>
+                  ARTICLE I
+                </div>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 var(--space-2)' }}>
+                  SCOPE OF WORK
+                </h2>
+                <p style={{ fontSize: 'var(--text-sm)', lineHeight: 1.65, color: 'var(--color-ink-secondary)', margin: 0 }}>
+                  {deal.description || 'No descriptive scope provided in the record.'}
+                </p>
+              </section>
 
-          {/* 03 — Record of Proceedings */}
-          <DocSection number="03" label="Record of Proceedings">
-            {eventsToShow.length === 0 ? (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontStyle: 'italic' }}>
-                No proceedings recorded in this matter.
-              </p>
-            ) : (
-              <>
-                <DealTimeline steps={timelineSteps} currentId={latestEventId} />
-                {historyError && (
-                  <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-faint)', marginTop: 'var(--space-3)', fontStyle: 'italic' }}>
-                    proceedings log sourced from embedded record
-                  </p>
-                )}
-              </>
-            )}
-          </DocSection>
+              {/* ARTICLE II: DOCUMENTS */}
+              {deal.documents && deal.documents.length > 0 && (
+                <section style={{ marginBottom: 'var(--space-6)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-ink-muted)', marginBottom: 4 }}>
+                    ARTICLE II
+                  </div>
+                  <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 var(--space-2)' }}>
+                    RECORD DOCUMENTS
+                  </h2>
+                  <div style={{ border: '1px solid #c4b396', borderRadius: 2, overflow: 'hidden' }}>
+                    {deal.documents.map((doc, idx) => (
+                      <div key={doc.id || idx} style={{ padding: '8px 12px', borderBottom: idx < deal.documents.length - 1 ? '1px solid #c9bfb0' : 'none', fontSize: 'var(--text-xs)', display: 'flex', justifyContent: 'space-between', background: 'var(--color-parchment-warm)' }}>
+                        <span style={{ fontWeight: 600 }}>{doc.name}</span>
+                        <span style={{ color: 'var(--color-ink-muted)', fontFamily: 'var(--font-mono)' }}>{doc.type} · {doc.size}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
-          {/* 04 — Documents */}
-          <DocSection number="04" label="Documents">
-            {deal.documents.length === 0 ? (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontStyle: 'italic' }}>
-                No documents appended to this record.
-              </p>
-            ) : (
-              <div>
-                {deal.documents.map((doc) => (
-                  <DocumentRow key={doc.id} document={doc} />
-                ))}
-              </div>
-            )}
-          </DocSection>
-        </div>
+              {/* ARTICLE III: PARTIES */}
+              <section style={{ marginBottom: 'var(--space-6)' }}>
+                <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-ink-muted)', marginBottom: 4 }}>
+                  ARTICLE III
+                </div>
+                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-sm)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 var(--space-3)' }}>
+                  REGISTERED PARTIES
+                </h2>
+                <div style={{ border: '1px solid #c4b396', borderRadius: 2, overflow: 'hidden', fontSize: 'var(--text-xs)' }}>
+                  {deal.parties.map((party, idx) => (
+                    <div key={party.id || idx} style={{ padding: '8px 12px', borderBottom: idx < deal.parties.length - 1 ? '1px solid #c9bfb0' : 'none', display: 'flex', justifyContent: 'space-between', background: 'var(--color-parchment-warm)' }}>
+                      <span style={{ fontWeight: 700 }}>{party.role}</span>
+                      <span>{party.name} {party.email && `(${party.email})`}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
 
-        {/* ─── STATUS + ACTIONS + DATES ────────────────────────── */}
-        <div
-          style={{
-            marginTop: 'var(--space-7)',
-            paddingTop: 'var(--space-6)',
-            borderTop: '1px solid var(--color-border-strong)',
-            display: 'grid',
-            gridTemplateColumns: '1fr 280px',
-            gap: 'var(--space-7)',
-            alignItems: 'start',
-          }}
-          className="ledger-record-actions"
-        >
-          {/* Left: status + actions */}
-          <div>
-            <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-text-faint)', marginBottom: 'var(--space-4)' }}>
-              Record Status
-            </div>
-            <DealStateTimeline currentStatus={deal.status} />
+              {/* NEXT ACTION CALLOUT BOX */}
+              <div
+                style={{
+                  background: 'var(--color-parchment-warm)',
+                  border: '1px solid #c4b396',
+                  borderRadius: 2,
+                  padding: 'var(--space-4) var(--space-5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 'var(--space-4)',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-ink-muted)', marginBottom: 2 }}>
+                    NEXT ACTION
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-secondary)' }}>
+                    {statusConfig?.isTerminal
+                      ? 'This record has reached a completed terminal state.'
+                      : loadingActions
+                      ? 'Determining available actions...'
+                      : actionsError
+                      ? 'Action check failed.'
+                      : 'Execute the available action to progress this record.'}
+                  </div>
+                </div>
 
-            {statusConfig?.isTerminal && (
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)', marginTop: 'var(--space-4)', fontStyle: 'italic', maxWidth: 480 }}>
-                This record has reached a terminal state. No further action is recorded.
-              </p>
-            )}
-
-            {/* Record actions */}
-            <div style={{ marginTop: 'var(--space-6)' }}>
-              <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-text-faint)', marginBottom: 'var(--space-3)' }}>
-                Record Actions
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', maxWidth: 400 }}>
-                {loadingActions ? (
-                  <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)' }}>
-                    Determining available actions…
-                  </p>
-                ) : actionsError ? (
-                  <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)' }}>
-                    Unable to determine available actions.{" "}
-                    <button onClick={refetch} style={{ background: 'none', border: 'none', color: 'var(--color-text-tertiary)', cursor: 'pointer', fontSize: 'inherit', padding: 0, textDecoration: 'underline' }}>
-                      Retry
-                    </button>
-                  </p>
-                ) : availableActions.length === 0 ? (
-                  <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)' }}>
-                    No actions available at this stage.
-                  </p>
-                ) : (
-                  availableActions.map((action) => (
+                <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                  {availableActions.map((action) => (
                     <Button
                       key={action}
                       variant={actionVariant(action)}
                       onClick={() => handleAction(action)}
                       loading={actionInFlight === action}
-                      disabled={actionInFlight !== null && actionInFlight !== action}
+                      size="sm"
                     >
-                      {ACTION_LABELS[action] ?? action}
+                      {ACTION_LABELS[action] ?? action} →
                     </Button>
+                  ))}
+                  {availableActions.length === 0 && !statusConfig?.isTerminal && (
+                    <Button variant="secondary" size="sm" onClick={() => setDrawerOpen(true)}>
+                      Official Log
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Timeline */}
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-ink-muted)', marginBottom: 'var(--space-3)' }}>
+                RECORD HISTORY
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                {eventsToShow.length === 0 ? (
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-muted)', fontStyle: 'italic' }}>
+                    No historical entries recorded.
+                  </div>
+                ) : (
+                  eventsToShow.map((evt, idx) => (
+                    <TimelineStepRow
+                      key={evt.id || idx}
+                      index={idx + 1}
+                      title={evt.label}
+                      timestamp={formatTimestamp(evt.timestamp)}
+                      actor={evt.actor}
+                      isCompleted={true}
+                    />
                   ))
                 )}
-                <hr style={{ border: 'none', borderTop: '1px solid var(--color-border)', margin: 'var(--space-1) 0' }} />
-                <Button variant="secondary" onClick={() => setModalOpen(true)}>View Full Record</Button>
-                <Button variant="secondary" onClick={() => setDrawerOpen(true)}>Official Log</Button>
-                {deal.documents.length > 0 && (
-                  <Button variant="ghost">Download Documents</Button>
-                )}
               </div>
             </div>
           </div>
-
-          {/* Right: key dates */}
-          <div>
-            <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-text-faint)', marginBottom: 'var(--space-4)' }}>
-              Record Dates
-            </div>
-            <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xs)', overflow: 'hidden' }}>
-              <DateRow label="Established" value={deal.createdAt} />
-              <DateRow label="Last Amended" value={deal.updatedAt} />
-              {deal.dueDate && <DateRow label="Due Date" value={deal.dueDate} />}
-              {deal.closeDate && <DateRow label="Closed" value={deal.closeDate} />}
-            </div>
-          </div>
-        </div>
+        </motion.div>
       </div>
 
-      {/* ─── MODAL: Full Record Certificate ──────────────────── */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} ariaLabel="Full record certificate">
-        <div style={{ padding: 'var(--space-6)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 'var(--space-5)', paddingBottom: 'var(--space-4)', borderBottom: '1px solid var(--color-border)' }}>
-            <div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 2 }}>
-                {deal.title}
-              </div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-faint)', letterSpacing: '0.06em' }}>
-                #{deal.id.slice(0, 8).toUpperCase()}
-              </div>
-            </div>
-            <button onClick={() => setModalOpen(false)} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', fontSize: 18, lineHeight: 1, padding: '2px 4px', flexShrink: 0 }}>
-              ×
-            </button>
-          </div>
-          <div>
-            <DetailRow label="Record Amount" value={deal.amountFormatted} />
-            <DetailRow label="Record Type" value={deal.dealType ?? '—'} />
-            <DetailRow label="Source" value={deal.source ?? '—'} />
-            <DetailRow label="Current Status" value={statusConfig?.label ?? deal.status} />
-            <DetailRow label="Established" value={formatDate(deal.createdAt)} />
-            <DetailRow label="Last Amended" value={formatDate(deal.updatedAt)} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-5)', paddingTop: 'var(--space-4)', borderTop: '1px solid var(--color-border)' }}>
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>Close</Button>
-          </div>
+      {/* Full Record Modal */}
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} ariaLabel="Record Certificate">
+        <div style={{ padding: 'var(--space-6)', background: 'var(--color-parchment-cream)', color: 'var(--color-ink-primary)' }}>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-xl)', margin: '0 0 var(--space-4)' }}>
+            Official Record Certificate #{formattedRecordNo}
+          </h2>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-secondary)', lineHeight: 1.6 }}>
+            Title: {deal.title}<br />
+            Amount: {deal.amountFormatted}<br />
+            Status: {deal.status}<br />
+            Parties: {deal.counterparties}
+          </p>
+          <Button variant="secondary" onClick={() => setModalOpen(false)}>Close</Button>
         </div>
       </Modal>
 
-      {/* ─── DRAWER: Official Log ──────────────────────────────── */}
-      <Drawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} side="right" ariaLabel="Official record log">
-        <div style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 2 }}>
-                Official Log
-              </div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-faint)' }}>
-                #{deal.id.slice(0, 8).toUpperCase()}
-              </div>
+      {/* Official Log Drawer */}
+      <Drawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} side="right" ariaLabel="Official Log">
+        <div style={{ padding: 'var(--space-5)', background: 'var(--color-parchment-cream)', color: 'var(--color-ink-primary)', height: '100%' }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--text-lg)', margin: '0 0 var(--space-4)' }}>
+            Official Audit Log
+          </h3>
+          {eventsToShow.map((e) => (
+            <div key={e.id} style={{ marginBottom: 'var(--space-3)', paddingBottom: 'var(--space-2)', borderBottom: '1px solid #c9bfb0' }}>
+              <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{e.label}</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-muted)' }}>{formatTimestamp(e.timestamp)} - {e.actor}</div>
             </div>
-            <button onClick={() => setDrawerOpen(false)} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', fontSize: 18, lineHeight: 1, padding: '2px 4px' }}>
-              ×
-            </button>
-          </div>
-          <div style={{ borderTop: '1px solid var(--color-border)' }} />
-          {eventsToShow.length === 0 ? (
-            <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontStyle: 'italic' }}>
-              No entries in the official log.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', flex: 1, overflowY: 'auto' }}>
-              {eventsToShow.slice().reverse().map((event) => (
-                <div
-                  key={event.id}
-                  style={{ paddingLeft: 'var(--space-4)', borderLeft: '2px solid var(--color-border)' }}
-                >
-                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-text-primary)', marginBottom: 2 }}>
-                    {event.label}
-                  </div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-                    {formatTimestamp(event.timestamp)}
-                    {event.actor && ` · ${event.actor}`}
-                  </div>
-                  {event.description && (
-                    <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', marginTop: 4, lineHeight: 1.5 }}>
-                      {event.description}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          ))}
           <Button variant="secondary" onClick={() => setDrawerOpen(false)}>Close</Button>
         </div>
       </Drawer>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-row components
-// ---------------------------------------------------------------------------
-
-function DocumentRow({ document: doc }: { document: DealDocument }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 'var(--space-3)',
-        padding: 'var(--space-3) 0',
-        borderBottom: '1px solid var(--color-border)',
-      }}
-    >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-        <span
-          style={{
-            fontSize: 'var(--text-sm)',
-            fontWeight: 500,
-            color: 'var(--color-text-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {doc.name}
-        </span>
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)' }}>
-          {doc.size} · Appended {formatTimestamp(doc.uploadedAt)}
-        </span>
-      </div>
-      <span
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--text-xs)',
-          color: 'var(--color-text-tertiary)',
-          padding: '2px 6px',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-xs)',
-          flexShrink: 0,
-          letterSpacing: '0.04em',
-        }}
-      >
-        {doc.type}
-      </span>
     </div>
   );
 }
 
-function PartyRow({ party }: { party: DealParty }) {
+function TimelineStepRow({
+  index,
+  title,
+  timestamp,
+  actor,
+  isCompleted,
+}: {
+  index: number;
+  title: string;
+  timestamp: string;
+  actor?: string;
+  isCompleted: boolean;
+}) {
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '120px 1fr',
-        gap: 'var(--space-4)',
-        alignItems: 'start',
-        padding: 'var(--space-3) 0',
-        borderBottom: '1px solid var(--color-border)',
-      }}
-    >
-      <span
+    <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'flex-start' }}>
+      <div
         style={{
-          fontSize: 'var(--text-xs)',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: 'var(--color-text-tertiary)',
-          paddingTop: 2,
+          width: 22,
+          height: 22,
+          borderRadius: '50%',
+          background: isCompleted ? '#4a3b2c' : 'transparent',
+          border: isCompleted ? 'none' : '1px dashed var(--color-ink-muted)',
+          color: isCompleted ? '#f5f0e8' : 'var(--color-ink-muted)',
+          fontSize: 10,
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
         }}
       >
-        {party.role}
-      </span>
+        {String(index).padStart(2, '0')}
+      </div>
       <div>
-        <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-text-primary)' }}>
-          {party.name}
+        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: isCompleted ? 'var(--color-ink-primary)' : 'var(--color-ink-muted)' }}>
+          {title}
         </div>
-        {party.email && (
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-            {party.email}
-          </div>
-        )}
+        <div style={{ fontSize: 10, color: 'var(--color-ink-muted)' }}>
+          {timestamp} {actor && `· By ${actor}`}
+        </div>
       </div>
     </div>
   );
 }
-
-function DateRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'baseline',
-        padding: 'var(--space-2) var(--space-4)',
-        borderBottom: '1px solid var(--color-border)',
-        gap: 'var(--space-4)',
-      }}
-    >
-      <span
-        style={{
-          fontSize: 'var(--text-xs)',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: 'var(--color-text-tertiary)',
-          flexShrink: 0,
-        }}
-      >
-        {label}
-      </span>
-      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', textAlign: 'right' }}>
-        {formatDate(value)}
-      </span>
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '140px 1fr',
-        gap: 'var(--space-4)',
-        padding: 'var(--space-2) 0',
-        borderBottom: '1px solid var(--color-border)',
-      }}
-    >
-      <span
-        style={{
-          fontSize: 'var(--text-xs)',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: 'var(--color-text-tertiary)',
-          paddingTop: 2,
-        }}
-      >
-        {label}
-      </span>
-      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Event → TimelineStep conversion
-// ---------------------------------------------------------------------------
-
-function eventToStep(event: DealEvent): TimelineStep {
-  const statusMap: Record<string, Status> = {
-    created: 'completed',
-    submitted: 'submitted',
-    accepted: 'accepted',
-    funded: 'funded',
-    in_progress: 'in_progress',
-    review_started: 'pending',
-    approved: 'approved',
-    disputed: 'disputed',
-    resolved: 'resolved',
-    completed: 'completed',
-  };
-
-  return {
-    id: event.id,
-    label: event.label,
-    status: statusMap[event.type] ?? 'pending',
-    timestamp: formatTimestamp(event.timestamp),
-    actor: event.actor,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Format helpers
-// ---------------------------------------------------------------------------
 
 function formatTimestamp(iso: string): string {
+  if (!iso) return '';
   const date = new Date(iso);
+  if (isNaN(date.getTime())) return iso;
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60_000);
   const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
 
   if (diffMin < 1) return 'Just now';
   if (diffMin < 60) return `${diffMin}m ago`;
   if (diffHour < 24) return `${diffHour}h ago`;
-  if (diffDay < 7) return `${diffDay}d ago`;
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -1085,10 +808,10 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
+function formatDateShort(iso: string): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }

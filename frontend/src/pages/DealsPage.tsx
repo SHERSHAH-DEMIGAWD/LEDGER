@@ -27,6 +27,7 @@ import { DealListSkeleton, EmptyState, ErrorState } from '../components/DealStat
 import { Button } from '../components/ui';
 import { DealStateBadge } from '../components/DealStateBadge';
 import { getDealStateConfig } from '../types/dealStates';
+import { useDealNavigation } from '../contexts/DealNavigationContext';
 import type { DealSummary } from '../types/deal';
 
 // ---------------------------------------------------------------------------
@@ -298,6 +299,7 @@ function RecordRegister({ entries }: { entries: DealSummary[] }) {
 function RecordRow({ deal, folio }: { deal: DealSummary; folio: number }) {
   const reduced = useReducedMotion();
   const statusConfig = getDealStateConfig(deal.status);
+  const { recordNavigation } = useDealNavigation();
 
   return (
     <motion.div
@@ -309,6 +311,7 @@ function RecordRow({ deal, folio }: { deal: DealSummary; folio: number }) {
     >
       <Link
         to={`/deals/${deal.id}`}
+        onClick={() => recordNavigation('forward')}
         style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
         aria-label={`${deal.title} — ${statusConfig?.label ?? deal.status}`}
       >

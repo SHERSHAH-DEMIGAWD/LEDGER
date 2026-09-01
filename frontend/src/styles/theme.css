@@ -1,172 +1,57 @@
 /**
- * Ledger Design Tokens
+ * Ledger Design Tokens & Book Metaphor Styles
  *
- * Constitutional Casebook / Institutional Trust aesthetic:
- * - Deep navy as the institutional frame
- * - Dark espresso/brown for surfaces
- * - Warm parchment for important records and contracts
- * - Restrained antique gold accents
- * - Sophisticated serif typography for major headings
- * - Clean modern sans-serif for functional UI
- *
- * The animation system in `src/motion/` is the source of truth for
- * transitions, easing, and timing. This file only describes static
- * design tokens.
+ * Physical Institutional Casebook system:
+ * - Spine: Dark mahogany & leather gradient frame
+ * - Cover: Inset gold-stamped leather cover
+ * - Record: Physical parchment sheet with paper-stack depth & bookmarks
+ * - Seals: Embossed wax and stamped archival insignia
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Source+Sans+3:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* ─────────────────────────────────────────────
-     Color: Institution Frame (navy + brown)
-     ───────────────────────────────────────────── */
-  /* Deep navy — the outer frame of the application */
-  --color-institution-navy: #0d1117;
-  --color-institution-navy-deep: #070a10;
-  --color-institution-navy-mid: #161b27;
+  /* Spine & Outer Binding */
+  --color-binding-spine: #16120e;
+  --color-binding-leather: #1c1611;
+  --color-binding-leather-dark: #120e0b;
+  --color-binding-border: #4a3b29;
 
-  /* Dark espresso/brown — sidebar and secondary surfaces */
-  --color-institution-brown: #1c1714;
-  --color-institution-brown-mid: #241f1b;
-  --color-institution-brown-warm: #2a221e;
+  /* Parchment Casebook Pages */
+  --color-parchment-cream: #faf7f0;
+  --color-parchment-base: #f4eee2;
+  --color-parchment-warm: #ebdcc6;
+  --color-parchment-aged: #e2cfb2;
+  --color-parchment-shadow: rgba(45, 30, 15, 0.14);
 
-  /* ─────────────────────────────────────────────
-     Color: Parchment Surfaces (records, cards)
-     ───────────────────────────────────────────── */
-  /* Warm parchment — the "paper" on which records sit */
-  --color-parchment: #f5f0e8;
-  --color-parchment-aged: #ede6d8;
-  --color-parchment-cream: #faf7f2;
-  --color-parchment-warm: #f0ebe0;
+  /* Gold Foil & Engraving */
+  --color-gold-bright: #d4af37;
+  --color-gold-foil: #b8860b;
+  --color-gold-pale: #cbb88a;
+  --color-gold-dark: #6e541b;
+  --color-gold-bg: rgba(184, 134, 11, 0.08);
 
-  /* Surface variants for light/record surfaces */
-  --color-surface-base: var(--color-parchment-cream);
-  --color-surface-1: #f0ebe0;
-  --color-surface-2: #e8e2d5;
-  --color-surface-3: #ddd6c7;
-  --color-surface-4: #d0c8b8;
+  /* Ink & Typography */
+  --color-ink-primary: #1b1612;
+  --color-ink-secondary: #4a3e32;
+  --color-ink-muted: #827361;
+  --color-ink-faint: #b3a594;
 
-  /* ─────────────────────────────────────────────
-     Color: Borders & Dividers
-     ───────────────────────────────────────────── */
-  /* On parchment surfaces */
-  --color-border: #c9bfb0;
-  --color-border-strong: #b5aa98;
-  --color-border-dark: #2a2826;
+  /* Typography Fonts */
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-sans: 'Source Sans 3', -apple-system, sans-serif;
+  --font-mono: 'SF Mono', Consolas, monospace;
 
-  /* On dark surfaces */
-  --color-border-dark-surface: #2e2a26;
-  --color-border-dark-strong: #3d3834;
-
-  /* ─────────────────────────────────────────────
-     Color: Text
-     ───────────────────────────────────────────── */
-  /* On light/parchment surfaces */
-  --color-text-primary: #1a1510;
-  --color-text-secondary: #4a4235;
-  --color-text-tertiary: #7a7060;
-  --color-text-muted: #a09880;
-  --color-text-faint: #c0b8a4;
-
-  /* On dark surfaces (navy/brown) */
-  --color-text-on-dark: #e8e0d0;
-  --color-text-on-dark-secondary: #a09880;
-  --color-text-on-dark-tertiary: #7a7060;
-  --color-text-on-dark-muted: #5a5040;
-
-  /* ─────────────────────────────────────────────
-     Color: Antique Gold Accent
-     ───────────────────────────────────────────── */
-  --color-gold: #8b7335;
-  --color-gold-bright: #a8893a;
-  --color-gold-pale: #c4ae72;
-  --color-gold-muted: #6b5a2a;
-  --color-gold-bg: rgba(139, 115, 53, 0.08);
-  --color-gold-border: rgba(139, 115, 53, 0.25);
-
-  /* ─────────────────────────────────────────────
-     Color: Status (restrained, semantic)
-     ───────────────────────────────────────────── */
-  /* Muted, desaturated — never neon */
-  --color-status-pending: #7a6835;
-  --color-status-pending-bg: rgba(122, 104, 53, 0.10);
-
-  --color-status-pending-acceptance: #8a7a3a;
-  --color-status-pending-acceptance-bg: rgba(138, 122, 58, 0.10);
-
-  --color-status-accepted: #3a5a8a;
-  --color-status-accepted-bg: rgba(58, 90, 138, 0.10);
-
-  --color-status-declined: #8a4a4a;
-  --color-status-declined-bg: rgba(138, 74, 74, 0.10);
-
-  --color-status-funded: #2a6a4a;
-  --color-status-funded-bg: rgba(42, 106, 74, 0.10);
-
-  --color-status-in-progress: #4a3a7a;
-  --color-status-in-progress-bg: rgba(74, 58, 122, 0.10);
-
-  --color-status-submitted: #2a5a7a;
-  --color-status-submitted-bg: rgba(42, 90, 122, 0.10);
-
-  --color-status-approved: #2a7a4a;
-  --color-status-approved-bg: rgba(42, 122, 74, 0.10);
-
-  --color-status-revision-requested: #7a6a2a;
-  --color-status-revision-requested-bg: rgba(122, 106, 42, 0.10);
-
-  --color-status-disputed: #8a3a2a;
-  --color-status-disputed-bg: rgba(138, 58, 42, 0.10);
-
-  --color-status-resolved: #5a5a5a;
-  --color-status-resolved-bg: rgba(90, 90, 90, 0.10);
-
-  --color-status-completed: #2a6a3a;
-  --color-status-completed-bg: rgba(42, 106, 58, 0.10);
-
-  --color-status-cancelled: #5a5a5a;
-  --color-status-cancelled-bg: rgba(90, 90, 90, 0.10);
-
-  --color-status-draft: #4a5a5a;
-  --color-status-draft-bg: rgba(74, 90, 90, 0.10);
-
-  /* ─────────────────────────────────────────────
-     Color: Focus & Interaction
-     ───────────────────────────────────────────── */
-  --color-focus: #8b7335;
-  --color-focus-ring: rgba(139, 115, 53, 0.4);
-
-  /* ─────────────────────────────────────────────
-     Typography
-     ───────────────────────────────────────────── */
-  /* Serif — display headings, record titles, major labels */
-  --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
-
-  /* Sans-serif — body text, controls, labels, metadata */
-  --font-sans: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-
-  /* Monospace — IDs, codes, amounts */
-  --font-mono: 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-
-  /* Type scale */
+  /* Type Scale */
   --text-xs: 11px;
   --text-sm: 13px;
   --text-base: 14px;
   --text-md: 15px;
   --text-lg: 17px;
-  --text-xl: 20px;
-  --text-2xl: 26px;
-  --text-3xl: 32px;
-  --text-4xl: 40px;
+  --text-xl: 21px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
 
-  /* Line heights */
-  --line-tight: 1.15;
-  --line-normal: 1.5;
-  --line-relaxed: 1.7;
-
-  /* ─────────────────────────────────────────────
-     Spacing
-     ───────────────────────────────────────────── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -176,36 +61,11 @@
   --space-7: 48px;
   --space-8: 64px;
 
-  /* ─────────────────────────────────────────────
-     Radius — restrained, not overly rounded
-     ───────────────────────────────────────────── */
-  --radius-none: 0;
   --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 5px;
-  --radius-lg: 8px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
 
-  /* ─────────────────────────────────────────────
-     Shadows — subtle, warm
-     ───────────────────────────────────────────── */
-  --shadow-sm: 0 1px 3px rgba(30, 20, 10, 0.08);
-  --shadow-md: 0 4px 12px rgba(30, 20, 10, 0.10);
-  --shadow-lg: 0 8px 24px rgba(30, 20, 10, 0.14);
-  --shadow-xl: 0 16px 40px rgba(30, 20, 10, 0.18);
-
-  /* ─────────────────────────────────────────────
-     Layout
-     ───────────────────────────────────────────── */
-  --layout-max-width: 1100px;
-  --layout-rail-width: 240px;
   --layout-sidebar-width: 256px;
-  --layout-context-rail-width: 280px;
-  --layout-header-height: 64px;
-
-  /* ─────────────────────────────────────────────
-     Paper texture — subtle grain overlay
-     ───────────────────────────────────────────── */
-  --texture-opacity: 0.025;
 }
 
 * {
@@ -215,22 +75,18 @@
 html, body, #root {
   margin: 0;
   padding: 0;
-  background: var(--color-surface-base);
-  color: var(--color-text-primary);
+  background: var(--color-binding-spine);
+  color: var(--color-ink-primary);
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  line-height: var(--line-normal);
   min-height: 100vh;
 }
 
 body {
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  /* Subtle paper grain texture — soft, never harsh */
   background-image:
-    radial-gradient(circle at 25% 35%, rgba(139, 115, 53, var(--texture-opacity)) 0%, transparent 50%),
-    radial-gradient(circle at 75% 65%, rgba(80, 60, 30, var(--texture-opacity)) 0%, transparent 50%);
-  background-attachment: fixed;
+    radial-gradient(circle at 50% 30%, rgba(184, 134, 11, 0.03) 0%, transparent 60%),
+    radial-gradient(circle at 10% 80%, rgba(30, 20, 10, 0.4) 0%, transparent 50%);
 }
 
 a {
@@ -240,98 +96,71 @@ a {
 
 button {
   font-family: inherit;
-  font-size: inherit;
   cursor: pointer;
   background: none;
   border: none;
   color: inherit;
-  padding: 0;
 }
 
-input, textarea, select {
-  font-family: inherit;
-  font-size: inherit;
-  color: inherit;
-}
-
-/* Accessible focus styles that work even if motion is reduced */
-:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
-
-::selection {
-  background: var(--color-gold-bg);
-  color: var(--color-text-primary);
-}
-
-/* Respect reduced motion globally */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
-
-/* ─────────────────────────────────────────────
-   Institutional Frame Layout
-   ───────────────────────────────────────────── */
+/* Institutional Frame Grid */
 .ledger-app-shell {
   display: grid;
   grid-template-columns: var(--layout-sidebar-width) 1fr;
   min-height: 100vh;
-  background: var(--color-institution-navy);
+  background: #0d0a08;
 }
 
 .ledger-app-shell > main {
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  background: var(--color-surface-base);
   position: relative;
+  background: #120e0b;
 }
 
-.ledger-app-shell > main::before {
-  /* Subtle paper edge — institutional frame effect */
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    var(--color-gold-muted) 20%,
-    var(--color-gold) 50%,
-    var(--color-gold-muted) 80%,
-    transparent 100%
-  );
-  opacity: 0.3;
-  z-index: 10;
-  pointer-events: none;
+/* Spine Sidebar */
+.ledger-sidebar {
+  background: linear-gradient(90deg, #0a0806 0%, #15100c 70%, #201812 100%);
+  border-right: 1px solid var(--color-binding-border);
+  box-shadow: 4px 0 15px rgba(0,0,0,0.6);
 }
 
-/* Responsive: collapse sidebar into a top bar on small screens */
+/* Gold Foil Headers */
+.gold-foil-title {
+  color: #f3e5c8;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8), 0 0 10px rgba(212, 175, 55, 0.2);
+}
+
+/* Paper Stack Depth for Contractual Record */
+.paper-stack-effect {
+  box-shadow:
+    3px 0 0 #e4d8c3,
+    6px 0 0 #d8c9ae,
+    9px 0 0 #1c1714,
+    0 15px 40px rgba(0,0,0,0.5);
+}
+
+/* Bookmark Tab on Right Edge */
+.bookmark-tab {
+  padding: 8px 12px;
+  background: #ebdcc6;
+  border: 1px solid #c4b396;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a3e32;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.bookmark-tab:hover {
+  transform: translateX(4px);
+  background: #f4eee2;
+}
+
 @media (max-width: 900px) {
   .ledger-app-shell {
     grid-template-columns: 1fr !important;
-  }
-  .ledger-app-shell > aside {
-    position: relative !important;
-    height: auto !important;
-    width: 100% !important;
-  }
-  .ledger-deal-detail-grid {
-    grid-template-columns: 1fr !important;
-  }
-  .ledger-record-actions {
-    grid-template-columns: 1fr !important;
-  }
-  .ledger-register-headers,
-  .ledger-register-row {
-    grid-template-columns: 40px 1fr 1fr 100px 100px 80px !important;
   }
 }
