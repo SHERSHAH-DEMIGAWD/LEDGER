@@ -13,6 +13,9 @@
  * for accept/decline actions. Transitions are handled by the dedicated
  * invitation endpoints, not by the generic deal transition endpoint.
  *
+ * Visual treatment: a docket of pending matters, ruled register, parchment
+ * surfaces, restrained action set. Matches the institutional ledger system.
+ *
  * Mock mode (VITE_USE_MOCK_DEALS !== 'false'): actions no-op locally.
  * Real backend mode: actions call the correct invitation-specific routes.
  */
@@ -20,7 +23,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Card, Reveal, Stack, StackItem } from '../motion/components';
+import { Skeleton } from '../motion/components';
 import { Button } from '../components/ui';
 import { DealStateBadge } from '../components/DealStateBadge';
 import { EmptyState, ErrorState } from '../components/DealStateViews';
@@ -34,7 +37,15 @@ interface Toast {
   kind: 'success' | 'error' | 'conflict';
 }
 
+const TOAST_STYLES: Record<Toast['kind'], { border: string }> = {
+  success: { border: 'var(--color-status-approved)' },
+  conflict: { border: 'var(--color-status-pending)' },
+  error: { border: 'var(--color-status-disputed)' },
+};
+
 function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) {
+  const reduced = useReducedMotion();
+
   return (
     <div
       style={{
@@ -49,69 +60,58 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
       }}
     >
       <AnimatePresence>
-        {toasts.map((toast) => (
-          <motion.div
-            key={toast.id}
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 40 }}
-            transition={{ duration: 0.2 }}
-            style={{
-              pointerEvents: 'all',
-              background:
-                toast.kind === 'success'
-                  ? 'var(--color-success-bg, #dcfce7)'
-                  : toast.kind === 'conflict'
-                  ? 'var(--color-warning-bg, #fef9c3)'
-                  : 'var(--color-error-bg, #fee2e2)',
-              border: `1px solid ${
-                toast.kind === 'success'
-                  ? 'var(--color-success-border, #86efac)'
-                  : toast.kind === 'conflict'
-                  ? 'var(--color-warning-border, #fde047)'
-                  : 'var(--color-error-border, #fca5a5)'
-              }`,
-              borderRadius: 'var(--radius-md)',
-              padding: 'var(--space-3) var(--space-4)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-3)',
-              minWidth: 280,
-              maxWidth: 380,
-              boxShadow: 'var(--shadow-md)',
-            }}
-          >
-            <span
+        {toasts.map((toast) => {
+          const style = TOAST_STYLES[toast.kind];
+          return (
+            <motion.div
+              key={toast.id}
+              initial={reduced ? { opacity: 0 } : { opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={reduced ? { opacity: 0 } : { opacity: 0, x: 40 }}
+              transition={{ duration: duration.normal, ease: easing.out }}
               style={{
-                fontSize: 'var(--text-sm)',
-                color:
-                  toast.kind === 'success'
-                    ? 'var(--color-success-text, #166534)'
-                    : toast.kind === 'conflict'
-                    ? 'var(--color-warning-text, #854d0e)'
-                    : 'var(--color-error-text, #991b1b)',
-                flex: 1,
+                pointerEvents: 'all',
+                background: 'var(--color-parchment-cream)',
+                border: `1px solid ${style.border}`,
+                borderLeft: `3px solid ${style.border}`,
+                borderRadius: 'var(--radius-sm)',
+                padding: 'var(--space-3) var(--space-4)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-3)',
+                minWidth: 280,
+                maxWidth: 380,
+                boxShadow: 'var(--shadow-md)',
               }}
             >
-              {toast.message}
-            </span>
-            <button
-              onClick={() => onDismiss(toast.id)}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 2,
-                color: 'inherit',
-                fontSize: 'var(--text-lg)',
-                lineHeight: 1,
-              }}
-              aria-label="Dismiss"
-            >
-              ×
-            </button>
-          </motion.div>
-        ))}
+              <span
+                style={{
+                  fontSize: 'var(--text-sm)',
+                  color: 'var(--color-text-primary)',
+                  flex: 1,
+                  fontWeight: 500,
+                }}
+              >
+                {toast.message}
+              </span>
+              <button
+                onClick={() => onDismiss(toast.id)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 2,
+                  color: 'var(--color-text-tertiary)',
+                  fontSize: 'var(--text-lg)',
+                  lineHeight: 1,
+                }}
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </motion.div>
+          );
+        })}
       </AnimatePresence>
     </div>
   );
@@ -194,51 +194,100 @@ export function InvitationsPage() {
         style={{
           maxWidth: 'var(--layout-max-width)',
           margin: '0 auto',
-          padding: 'var(--space-7) var(--space-5)',
+          padding: 'var(--space-7) var(--space-6) var(--space-8)',
           display: 'flex',
           flexDirection: 'column',
           gap: 'var(--space-6)',
         }}
       >
-        {/* Header */}
+        {/* ─── HEADER ─────────────────────────────────────────────── */}
         <motion.header
-          initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
+          initial={reduced ? { opacity: 0 } : { opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: duration.normal, ease: easing.out }}
-          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}
         >
-          <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, margin: 0 }}>
-            Invitations
-          </h1>
-          <p style={{ color: 'var(--color-text-tertiary)', fontSize: 'var(--text-sm)', margin: 0 }}>
-            Review and respond to deal invitations sent to you.
-          </p>
-        </motion.header>
-
-        {/* Loading state */}
-        {loading && (
           <div
             style={{
-              padding: 'var(--space-7)',
-              textAlign: 'center',
-              color: 'var(--color-text-muted)',
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.16em',
+              color: 'var(--color-text-faint)',
+              marginBottom: 'var(--space-2)',
             }}
           >
-            <motion.div
-              animate={reduced ? {} : { opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            >
-              Loading invitations…
-            </motion.div>
+            Pending Matters
+          </div>
+          <h1
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'clamp(22px, 4vw, 32px)',
+              fontWeight: 600,
+              color: 'var(--color-text-primary)',
+              letterSpacing: '-0.02em',
+              margin: 0,
+              lineHeight: 1.15,
+            }}
+          >
+            Invitations
+          </h1>
+          <p
+            style={{
+              color: 'var(--color-text-tertiary)',
+              fontSize: 'var(--text-sm)',
+              margin: 'var(--space-2) 0 0',
+              maxWidth: 520,
+            }}
+          >
+            Review and respond to deal invitations sent to you.
+          </p>
+          <div
+            style={{
+              borderTop: '1px solid var(--color-border-strong)',
+              marginTop: 'var(--space-5)',
+            }}
+          />
+        </motion.header>
+
+        {/* ─── LOADING ────────────────────────────────────────────── */}
+        {loading && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                style={{
+                  borderBottom: '1px solid var(--color-border)',
+                  padding: 'var(--space-5) 0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 'var(--space-3)',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  <Skeleton width="40%" height={18} />
+                  <Skeleton width="80%" height={13} />
+                  <Skeleton width="55%" height={13} />
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 'var(--space-4)',
+                    paddingTop: 'var(--space-2)',
+                    borderTop: '1px solid var(--color-border)',
+                  }}
+                >
+                  <Skeleton width={80} height={12} />
+                  <Skeleton width={80} height={12} />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Error state */}
-        {!loading && error && (
-          <ErrorState message={error} onRetry={fetchInvitations} />
-        )}
+        {/* ─── ERROR ─────────────────────────────────────────────── */}
+        {!loading && error && <ErrorState message={error} onRetry={fetchInvitations} />}
 
-        {/* Empty state */}
+        {/* ─── EMPTY ──────────────────────────────────────────────── */}
         {!loading && !error && invitations && invitations.length === 0 && (
           <EmptyState
             title="No pending invitations"
@@ -253,26 +302,47 @@ export function InvitationsPage() {
           />
         )}
 
-        {/* Invitation list */}
+        {/* ─── INVITATION LIST ────────────────────────────────────── */}
         {!loading && !error && invitations && invitations.length > 0 && (
-          <Reveal>
-            <Stack
-              staggerDelay={0.06}
-              style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {/* Column headers */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 130px 130px',
+                gap: 'var(--space-3)',
+                padding: '8px 0',
+                borderBottom: '1px solid var(--color-border-strong)',
+              }}
             >
-              {invitations.map((inv) => (
-                <StackItem key={inv.id}>
-                  <InvitationCard
-                    invitation={inv}
-                    onAccept={() => handleAccept(inv.id)}
-                    onDecline={() => handleDecline(inv.id)}
-                    isLoading={actionInFlight === inv.id}
-                    disabled={actionInFlight !== null && actionInFlight !== inv.id}
-                  />
-                </StackItem>
+              {['Invitation', 'Amount', 'Status'].map((h) => (
+                <span
+                  key={h}
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.14em',
+                    color: 'var(--color-text-faint)',
+                  }}
+                >
+                  {h}
+                </span>
               ))}
-            </Stack>
-          </Reveal>
+            </div>
+
+            {invitations.map((inv, i) => (
+              <InvitationRow
+                key={inv.id}
+                invitation={inv}
+                index={i}
+                onAccept={() => handleAccept(inv.id)}
+                onDecline={() => handleDecline(inv.id)}
+                isLoading={actionInFlight === inv.id}
+                disabled={actionInFlight !== null && actionInFlight !== inv.id}
+              />
+            ))}
+          </div>
         )}
       </div>
     </>
@@ -280,112 +350,134 @@ export function InvitationsPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-component
+// InvitationRow — a single ruled invitation entry
 // ---------------------------------------------------------------------------
 
-function InvitationCard({
+function InvitationRow({
   invitation,
+  index,
   onAccept,
   onDecline,
   isLoading,
   disabled,
 }: {
   invitation: InvitationSummary;
+  index: number;
   onAccept: () => void;
   onDecline: () => void;
   isLoading: boolean;
   disabled: boolean;
 }) {
+  const reduced = useReducedMotion();
+
   return (
-    <Card>
+    <motion.div
+      initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: duration.normal, ease: easing.out, delay: index * 0.04 }}
+      style={{
+        borderBottom: '1px solid var(--color-border)',
+        padding: 'var(--space-5) 0',
+      }}
+    >
       <div
         style={{
-          padding: 'var(--space-5)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-4)',
+          display: 'grid',
+          gridTemplateColumns: '1fr 130px 130px',
+          gap: 'var(--space-3)',
+          alignItems: 'start',
         }}
       >
-        {/* Top row: title + status badge */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 'var(--space-3)',
-            flexWrap: 'wrap',
-          }}
-        >
-          <h2
+        {/* Invitation text */}
+        <div style={{ minWidth: 0 }}>
+          <h3
             style={{
+              fontFamily: 'var(--font-display)',
               fontSize: 'var(--text-lg)',
               fontWeight: 600,
               margin: 0,
+              marginBottom: 'var(--space-1)',
+              color: 'var(--color-text-primary)',
+              letterSpacing: '-0.01em',
             }}
           >
             {invitation.title}
-          </h2>
+          </h3>
+          <p
+            style={{
+              color: 'var(--color-text-secondary)',
+              margin: 0,
+              fontSize: 'var(--text-sm)',
+              lineHeight: 1.6,
+              marginBottom: 'var(--space-3)',
+            }}
+          >
+            {invitation.description}
+          </p>
+
+          {/* Metadata row */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--space-4)',
+              flexWrap: 'wrap',
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-tertiary)',
+            }}
+          >
+            <span>
+              {invitation.deliverableCount} deliverable{invitation.deliverableCount !== 1 ? 's' : ''}
+            </span>
+            <span>From Brand {invitation.brandId.slice(0, 8)}</span>
+          </div>
+
+          {/* Actions */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 'var(--space-2)',
+              marginTop: 'var(--space-4)',
+              flexWrap: 'wrap',
+            }}
+          >
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onDecline}
+              loading={isLoading}
+              disabled={disabled}
+            >
+              Decline
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={onAccept}
+              loading={isLoading}
+              disabled={disabled}
+            >
+              Accept
+            </Button>
+          </div>
+        </div>
+
+        {/* Amount */}
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-sm)',
+            fontWeight: 500,
+            color: 'var(--color-text-primary)',
+          }}
+        >
+          {invitation.amountFormatted}
+        </div>
+
+        {/* Status */}
+        <div>
           <DealStateBadge status={invitation.status as never} size="sm" />
         </div>
-
-        {/* Description */}
-        <p
-          style={{
-            color: 'var(--color-text-secondary)',
-            margin: 0,
-            fontSize: 'var(--text-sm)',
-            lineHeight: 1.6,
-          }}
-        >
-          {invitation.description}
-        </p>
-
-        {/* Metadata row */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 'var(--space-5)',
-            flexWrap: 'wrap',
-            fontSize: 'var(--text-sm)',
-            color: 'var(--color-text-tertiary)',
-            paddingTop: 'var(--space-2)',
-            borderTop: '1px solid var(--color-border)',
-          }}
-        >
-          <span style={{ fontFamily: 'var(--font-mono)' }}>
-            {invitation.amountFormatted}
-          </span>
-          <span>{invitation.deliverableCount} deliverable{invitation.deliverableCount !== 1 ? 's' : ''}</span>
-          <span>From Brand {invitation.brandId.slice(0, 8)}</span>
-        </div>
-
-        {/* Actions */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 'var(--space-2)',
-            justifyContent: 'flex-end',
-            flexWrap: 'wrap',
-          }}
-        >
-          <Button
-            variant="secondary"
-            onClick={onDecline}
-            loading={isLoading}
-            disabled={disabled}
-          >
-            Decline
-          </Button>
-          <Button
-            variant="primary"
-            onClick={onAccept}
-            loading={isLoading}
-            disabled={disabled}
-          >
-            Accept
-          </Button>
-        </div>
       </div>
-    </Card>
+    </motion.div>
   );
 }

@@ -271,6 +271,7 @@ function TimelineDot({ state, status }: TimelineDotProps) {
   };
 
   const isFilled = state === 'past' || state === 'current' || state === 'active';
+  const dotColor = statusToColor[status] ?? 'var(--color-text-muted)';
 
   return (
     <motion.span
@@ -281,37 +282,12 @@ function TimelineDot({ state, status }: TimelineDotProps) {
         width: 16,
         height: 16,
         borderRadius: '50%',
-        background: isFilled ? statusToColor[status] : 'transparent',
-        border: `2px solid ${
-          isFilled ? statusToColor[status] : 'var(--color-border-strong)'
-        }`,
+        background: isFilled ? dotColor : 'transparent',
+        border: `2px solid ${isFilled ? dotColor : 'var(--color-border-strong)'}`,
         flexShrink: 0,
         margin: '6px 0',
         position: 'relative',
       }}
-    >
-      {state === 'current' && !reduced && (
-        <motion.span
-          aria-hidden
-          initial={{ opacity: 0, scale: 0.4 }}
-          animate={{
-            opacity: [0, 0.6, 0],
-            scale: [1, 1.7, 2.2],
-          }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            ease: 'easeOut',
-            repeatDelay: 0.2,
-          }}
-          style={{
-            position: 'absolute',
-            inset: -2,
-            borderRadius: '50%',
-            border: `2px solid ${statusToColor[status]}`,
-          }}
-        />
-      )}
-    </motion.span>
+    />
   );
 }

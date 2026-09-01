@@ -107,7 +107,7 @@ export function DealStateTimeline({
           const isFuture = isFutureState(order, currentOrder);
           const isLast = index === displaySteps.length - 1;
 
-          const color = `var(${stateConfig?.colorVar ?? '--color-text-muted'})`;
+          const color = stateConfig?.colorVar ? `var(${stateConfig.colorVar})` : 'var(--color-text-muted)';
 
           return (
             <div
@@ -208,8 +208,8 @@ export function DealStateTimeline({
           transition={{ duration: reduced ? 0 : duration.normal, ease: easing.out }}
           style={{
             padding: compact ? 'var(--space-3) var(--space-4)' : 'var(--space-4) var(--space-5)',
-            background: `var(${config?.bgVar ?? 'rgba(79, 79, 99, 0.10)'})`,
-            border: `1px solid var(${config?.colorVar ?? '--color-text-muted'}, 0.2)`,
+            background: config?.bgVar ? `var(${config.bgVar})` : 'rgba(79, 79, 99, 0.10)',
+            border: `1px solid ${config?.colorVar ? `var(${config.colorVar})` : 'var(--color-text-muted)'}`,
             borderRadius: 'var(--radius-md)',
             display: 'flex',
             alignItems: 'center',
@@ -220,7 +220,7 @@ export function DealStateTimeline({
             isPast={false}
             isCurrent={true}
             isFuture={false}
-            color={`var(${config?.colorVar ?? '--color-text-muted'})`}
+            color={config?.colorVar ? `var(${config.colorVar})` : 'var(--color-text-muted)'}
             reduced={reduced}
             compact={false}
           />
@@ -285,30 +285,6 @@ function StateDot({ isPast, isCurrent, color, reduced, compact }: StateDotProps)
         zIndex: 1,
       }}
       aria-hidden
-    >
-      {/* Pulse ring for current state */}
-      {isCurrent && !reduced && (
-        <motion.span
-          aria-hidden
-          initial={{ opacity: 0, scale: 0.4 }}
-          animate={{
-            opacity: [0, 0.5, 0],
-            scale: [1, 1.6, 2.2],
-          }}
-          transition={{
-            duration: 2.2,
-            repeat: Infinity,
-            ease: 'easeOut',
-            repeatDelay: 0.3,
-          }}
-          style={{
-            position: 'absolute',
-            inset: -2,
-            borderRadius: '50%',
-            border: `2px solid ${color}`,
-          }}
-        />
-      )}
-    </motion.span>
+    />
   );
 }

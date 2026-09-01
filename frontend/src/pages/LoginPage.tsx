@@ -106,65 +106,170 @@ export function LoginPage() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: 'var(--space-6)',
-        background: 'var(--color-surface-base)',
+        background: 'var(--color-institution-navy)',
         gap: 'var(--space-6)',
       }}
     >
       {/* Logo / heading */}
       <div style={{ textAlign: 'center' }}>
+        {/* Ledger institutional seal */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 'var(--space-2)',
-            marginBottom: 'var(--space-3)',
+            gap: 'var(--space-3)',
+            marginBottom: 'var(--space-4)',
           }}
         >
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <rect width="32" height="32" rx="6" fill="var(--color-surface-3)" />
-            <path
-              d="M8 10h16M8 16h12M8 22h8"
-              stroke="var(--color-text-primary)"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
+          <svg width="44" height="44" viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="22" stroke="var(--color-gold)" strokeWidth="1.5" opacity="0.7" />
+            <circle cx="24" cy="24" r="18" stroke="var(--color-gold)" strokeWidth="0.75" opacity="0.4" />
+            <rect x="12" y="14" width="24" height="20" rx="1.5" stroke="var(--color-gold)" strokeWidth="1.5" fill="none" />
+            <line x1="12" y1="20" x2="36" y2="20" stroke="var(--color-gold)" strokeWidth="1" opacity="0.7" />
+            <line x1="16" y1="24" x2="30" y2="24" stroke="var(--color-gold)" strokeWidth="0.75" opacity="0.5" />
+            <line x1="16" y1="28" x2="28" y2="28" stroke="var(--color-gold)" strokeWidth="0.75" opacity="0.5" />
           </svg>
-          <span style={{ fontWeight: 600, fontSize: 'var(--text-lg)' }}>
-            Ledger
-          </span>
+          <div style={{ textAlign: 'left' }}>
+            <div
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'var(--text-2xl)',
+                fontWeight: 600,
+                color: 'var(--color-text-on-dark)',
+                lineHeight: 1.1,
+              }}
+            >
+              Ledger
+            </div>
+            <div
+              style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-gold)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                marginTop: 2,
+              }}
+            >
+              Records &amp; Contracts
+            </div>
+          </div>
         </div>
         <h1
           style={{
+            fontFamily: 'var(--font-display)',
             fontSize: 'var(--text-xl)',
-            fontWeight: 700,
+            fontWeight: 600,
             margin: 0,
-            color: 'var(--color-text-primary)',
+            color: 'var(--color-text-on-dark)',
+            letterSpacing: '-0.01em',
           }}
         >
           Sign in to your account
         </h1>
       </div>
 
-      {/* Card */}
+      {/* Card — parchment on navy */}
       <div
         style={{
           width: '100%',
           maxWidth: '480px',
-          background: 'var(--color-surface-1)',
+          background: 'var(--color-parchment-cream)',
           border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-lg)',
+          borderRadius: 'var(--radius-sm)',
           padding: 'var(--space-6)',
-          boxShadow: 'var(--shadow-md)',
+          boxShadow: 'var(--shadow-xl)',
+          position: 'relative',
         }}
       >
+        {/* Subtle corner ornament */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            width: 40,
+            height: 40,
+            overflow: 'hidden',
+            pointerEvents: 'none',
+          }}
+          aria-hidden
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: -1,
+              right: -1,
+              width: 24,
+              height: 24,
+              borderTop: '1px solid var(--color-gold)',
+              borderRight: '1px solid var(--color-gold)',
+              opacity: 0.3,
+            }}
+          />
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            width: 40,
+            height: 40,
+            overflow: 'hidden',
+            pointerEvents: 'none',
+          }}
+          aria-hidden
+        >
+          <div
+            style={{
+              position: 'absolute',
+              bottom: -1,
+              left: -1,
+              width: 24,
+              height: 24,
+              borderBottom: '1px solid var(--color-gold)',
+              borderLeft: '1px solid var(--color-gold)',
+              opacity: 0.3,
+            }}
+          />
+        </div>
         {IS_DEV && SEED_USERS.length > 0 ? (
           <>
+            {/* Archival section header for dev list */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+                marginBottom: 'var(--space-3)',
+              }}
+            >
+              <div
+                style={{
+                  width: 4,
+                  height: 4,
+                  background: 'var(--color-gold)',
+                  borderRadius: '50%',
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.14em',
+                  color: 'var(--color-text-tertiary)',
+                }}
+              >
+                Development Personas
+              </span>
+            </div>
             <p
               style={{
                 fontSize: 'var(--text-sm)',
                 color: 'var(--color-text-secondary)',
                 margin: '0 0 var(--space-4)',
+                fontStyle: 'italic',
               }}
             >
               Click any persona below to sign in instantly. No password needed in
@@ -181,8 +286,8 @@ export function LoginPage() {
                         fontSize: 'var(--text-xs)',
                         fontWeight: 600,
                         textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        color: 'var(--color-text-muted)',
+                        letterSpacing: '0.08em',
+                        color: 'var(--color-text-tertiary)',
                         marginBottom: 'var(--space-2)',
                       }}
                     >
@@ -199,17 +304,17 @@ export function LoginPage() {
                             alignItems: 'center',
                             justifyContent: 'space-between',
                             width: '100%',
-                            padding: '10px 12px',
+                            padding: '9px 12px',
                             background:
                               selectedUser?.id === u.id
                                 ? 'var(--color-surface-3)'
-                                : 'var(--color-surface-2)',
+                                : 'var(--color-parchment-warm)',
                             border: `1px solid ${
                               selectedUser?.id === u.id
-                                ? 'var(--color-accent)'
+                                ? 'var(--color-gold)'
                                 : 'var(--color-border)'
                             }`,
-                            borderRadius: 'var(--radius-md)',
+                            borderRadius: 'var(--radius-sm)',
                             cursor: loading ? 'wait' : 'pointer',
                             textAlign: 'left',
                             transition: 'all 0.15s',
@@ -238,7 +343,9 @@ export function LoginPage() {
                           <div
                             style={{
                               fontSize: 'var(--text-xs)',
-                              color: 'var(--color-text-muted)',
+                              color: 'var(--color-text-faint)',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em',
                             }}
                           >
                             {u.blurb}
@@ -255,7 +362,7 @@ export function LoginPage() {
           // Production: real email/password form
           <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Email</span>
+              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-text-secondary)' }}>Email</span>
               <input
                 type="email"
                 value={email}
@@ -265,16 +372,16 @@ export function LoginPage() {
                 style={{
                   padding: '8px 12px',
                   border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 'var(--radius-sm)',
                   fontSize: 'var(--text-sm)',
-                  background: 'var(--color-surface-base)',
+                  background: 'var(--color-parchment-warm)',
                   color: 'var(--color-text-primary)',
                 }}
               />
             </label>
 
             <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Password</span>
+              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-text-secondary)' }}>Password</span>
               <input
                 type="password"
                 value={password}
@@ -284,9 +391,9 @@ export function LoginPage() {
                 style={{
                   padding: '8px 12px',
                   border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 'var(--radius-sm)',
                   fontSize: 'var(--text-sm)',
-                  background: 'var(--color-surface-base)',
+                  background: 'var(--color-parchment-warm)',
                   color: 'var(--color-text-primary)',
                 }}
               />
@@ -312,12 +419,13 @@ export function LoginPage() {
               disabled={loading}
               style={{
                 padding: '10px 16px',
-                background: 'var(--color-accent)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                fontWeight: 600,
+                background: 'var(--color-institution-navy)',
+                color: 'var(--color-text-on-dark)',
+                border: '1px solid var(--color-institution-navy)',
+                borderRadius: 'var(--radius-sm)',
+                fontWeight: 500,
                 fontSize: 'var(--text-sm)',
+                letterSpacing: '0.02em',
                 cursor: loading ? 'wait' : 'pointer',
                 opacity: loading ? 0.7 : 1,
               }}
@@ -333,7 +441,7 @@ export function LoginPage() {
             style={{
               marginTop: 'var(--space-3)',
               fontSize: 'var(--text-sm)',
-              color: 'var(--color-error)',
+              color: 'var(--color-status-disputed)',
             }}
           >
             {error}
@@ -342,9 +450,9 @@ export function LoginPage() {
       </div>
 
       {/* Register link */}
-      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)', margin: 0 }}>
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-on-dark-secondary)', margin: 0 }}>
         Don&apos;t have an account?{' '}
-        <a href="/register" style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>
+        <a href="/register" style={{ color: 'var(--color-gold-pale)', textDecoration: 'underline' }}>
           Create one
         </a>
       </p>

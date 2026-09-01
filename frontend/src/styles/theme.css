@@ -1,84 +1,172 @@
 /**
  * Ledger Design Tokens
  *
- * The visual language is intentionally calm, precise, and premium.
- * Avoid loud colors, harsh gradients, or unnecessary ornamentation.
+ * Constitutional Casebook / Institutional Trust aesthetic:
+ * - Deep navy as the institutional frame
+ * - Dark espresso/brown for surfaces
+ * - Warm parchment for important records and contracts
+ * - Restrained antique gold accents
+ * - Sophisticated serif typography for major headings
+ * - Clean modern sans-serif for functional UI
  *
  * The animation system in `src/motion/` is the source of truth for
  * transitions, easing, and timing. This file only describes static
  * design tokens.
  */
 
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Source+Sans+3:wght@300;400;500;600;700&display=swap');
+
 :root {
-  /* Color: surfaces */
-  --color-bg: #0a0a0f;
-  --color-surface-1: #11111a;
-  --color-surface-2: #161624;
-  --color-surface-3: #1d1d2e;
-  --color-border: #232336;
-  --color-border-strong: #2e2e47;
+  /* ─────────────────────────────────────────────
+     Color: Institution Frame (navy + brown)
+     ───────────────────────────────────────────── */
+  /* Deep navy — the outer frame of the application */
+  --color-institution-navy: #0d1117;
+  --color-institution-navy-deep: #070a10;
+  --color-institution-navy-mid: #161b27;
 
-  /* Color: text */
-  --color-text-primary: #fafafa;
-  --color-text-secondary: #b5b5c2;
-  --color-text-tertiary: #76768a;
-  --color-text-muted: #4f4f63;
+  /* Dark espresso/brown — sidebar and secondary surfaces */
+  --color-institution-brown: #1c1714;
+  --color-institution-brown-mid: #241f1b;
+  --color-institution-brown-warm: #2a221e;
 
-  /* Color: status (reserved, calm)
-     These are intentionally low-chroma to feel like
-     a financial product, not a notification feed. */
-  --color-status-pending: #a08a3a;
-  --color-status-pending-bg: rgba(160, 138, 58, 0.10);
+  /* ─────────────────────────────────────────────
+     Color: Parchment Surfaces (records, cards)
+     ───────────────────────────────────────────── */
+  /* Warm parchment — the "paper" on which records sit */
+  --color-parchment: #f5f0e8;
+  --color-parchment-aged: #ede6d8;
+  --color-parchment-cream: #faf7f2;
+  --color-parchment-warm: #f0ebe0;
 
-  --color-status-pending-acceptance: #b89e2a;
-  --color-status-pending-acceptance-bg: rgba(184, 158, 42, 0.10);
+  /* Surface variants for light/record surfaces */
+  --color-surface-base: var(--color-parchment-cream);
+  --color-surface-1: #f0ebe0;
+  --color-surface-2: #e8e2d5;
+  --color-surface-3: #ddd6c7;
+  --color-surface-4: #d0c8b8;
 
-  --color-status-accepted: #5a6dab;
-  --color-status-accepted-bg: rgba(90, 109, 171, 0.10);
+  /* ─────────────────────────────────────────────
+     Color: Borders & Dividers
+     ───────────────────────────────────────────── */
+  /* On parchment surfaces */
+  --color-border: #c9bfb0;
+  --color-border-strong: #b5aa98;
+  --color-border-dark: #2a2826;
 
-  --color-status-declined: #a45a5a;
-  --color-status-declined-bg: rgba(164, 90, 90, 0.10);
+  /* On dark surfaces */
+  --color-border-dark-surface: #2e2a26;
+  --color-border-dark-strong: #3d3834;
 
-  --color-status-funded: #4a7d68;
-  --color-status-funded-bg: rgba(74, 125, 104, 0.10);
+  /* ─────────────────────────────────────────────
+     Color: Text
+     ───────────────────────────────────────────── */
+  /* On light/parchment surfaces */
+  --color-text-primary: #1a1510;
+  --color-text-secondary: #4a4235;
+  --color-text-tertiary: #7a7060;
+  --color-text-muted: #a09880;
+  --color-text-faint: #c0b8a4;
 
-  --color-status-in-progress: #6d5cab;
-  --color-status-in-progress-bg: rgba(109, 92, 171, 0.10);
+  /* On dark surfaces (navy/brown) */
+  --color-text-on-dark: #e8e0d0;
+  --color-text-on-dark-secondary: #a09880;
+  --color-text-on-dark-tertiary: #7a7060;
+  --color-text-on-dark-muted: #5a5040;
 
-  --color-status-submitted: #3d6e8a;
-  --color-status-submitted-bg: rgba(61, 110, 138, 0.10);
+  /* ─────────────────────────────────────────────
+     Color: Antique Gold Accent
+     ───────────────────────────────────────────── */
+  --color-gold: #8b7335;
+  --color-gold-bright: #a8893a;
+  --color-gold-pale: #c4ae72;
+  --color-gold-muted: #6b5a2a;
+  --color-gold-bg: rgba(139, 115, 53, 0.08);
+  --color-gold-border: rgba(139, 115, 53, 0.25);
 
-  --color-status-approved: #4a8a6a;
-  --color-status-approved-bg: rgba(74, 138, 106, 0.10);
+  /* ─────────────────────────────────────────────
+     Color: Status (restrained, semantic)
+     ───────────────────────────────────────────── */
+  /* Muted, desaturated — never neon */
+  --color-status-pending: #7a6835;
+  --color-status-pending-bg: rgba(122, 104, 53, 0.10);
 
-  --color-status-revision-requested: #8a7d3a;
-  --color-status-revision-requested-bg: rgba(138, 125, 58, 0.10);
+  --color-status-pending-acceptance: #8a7a3a;
+  --color-status-pending-acceptance-bg: rgba(138, 122, 58, 0.10);
 
-  --color-status-disputed: #b06a5a;
-  --color-status-disputed-bg: rgba(176, 106, 90, 0.10);
+  --color-status-accepted: #3a5a8a;
+  --color-status-accepted-bg: rgba(58, 90, 138, 0.10);
 
-  --color-status-resolved: #6a6a7a;
-  --color-status-resolved-bg: rgba(106, 106, 122, 0.10);
+  --color-status-declined: #8a4a4a;
+  --color-status-declined-bg: rgba(138, 74, 74, 0.10);
 
-  --color-status-completed: #5a8a6a;
-  --color-status-completed-bg: rgba(90, 138, 106, 0.10);
+  --color-status-funded: #2a6a4a;
+  --color-status-funded-bg: rgba(42, 106, 74, 0.10);
 
-  --color-status-cancelled: #6a6a7a;
-  --color-status-cancelled-bg: rgba(106, 106, 122, 0.10);
+  --color-status-in-progress: #4a3a7a;
+  --color-status-in-progress-bg: rgba(74, 58, 122, 0.10);
 
-  --color-status-draft: #5a6a7a;
-  --color-status-draft-bg: rgba(90, 106, 122, 0.10);
+  --color-status-submitted: #2a5a7a;
+  --color-status-submitted-bg: rgba(42, 90, 122, 0.10);
 
-  /* Color: focus */
-  --color-focus: #8a8ac4;
+  --color-status-approved: #2a7a4a;
+  --color-status-approved-bg: rgba(42, 122, 74, 0.10);
 
-  /* Radius */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --color-status-revision-requested: #7a6a2a;
+  --color-status-revision-requested-bg: rgba(122, 106, 42, 0.10);
 
-  /* Spacing */
+  --color-status-disputed: #8a3a2a;
+  --color-status-disputed-bg: rgba(138, 58, 42, 0.10);
+
+  --color-status-resolved: #5a5a5a;
+  --color-status-resolved-bg: rgba(90, 90, 90, 0.10);
+
+  --color-status-completed: #2a6a3a;
+  --color-status-completed-bg: rgba(42, 106, 58, 0.10);
+
+  --color-status-cancelled: #5a5a5a;
+  --color-status-cancelled-bg: rgba(90, 90, 90, 0.10);
+
+  --color-status-draft: #4a5a5a;
+  --color-status-draft-bg: rgba(74, 90, 90, 0.10);
+
+  /* ─────────────────────────────────────────────
+     Color: Focus & Interaction
+     ───────────────────────────────────────────── */
+  --color-focus: #8b7335;
+  --color-focus-ring: rgba(139, 115, 53, 0.4);
+
+  /* ─────────────────────────────────────────────
+     Typography
+     ───────────────────────────────────────────── */
+  /* Serif — display headings, record titles, major labels */
+  --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+
+  /* Sans-serif — body text, controls, labels, metadata */
+  --font-sans: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Monospace — IDs, codes, amounts */
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+
+  /* Type scale */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --text-3xl: 32px;
+  --text-4xl: 40px;
+
+  /* Line heights */
+  --line-tight: 1.15;
+  --line-normal: 1.5;
+  --line-relaxed: 1.7;
+
+  /* ─────────────────────────────────────────────
+     Spacing
+     ───────────────────────────────────────────── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -88,33 +176,36 @@
   --space-7: 48px;
   --space-8: 64px;
 
-  /* Typography */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
-  --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  /* ─────────────────────────────────────────────
+     Radius — restrained, not overly rounded
+     ───────────────────────────────────────────── */
+  --radius-none: 0;
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
 
-  --text-xs: 11px;
-  --text-sm: 13px;
-  --text-base: 14px;
-  --text-md: 15px;
-  --text-lg: 17px;
-  --text-xl: 20px;
-  --text-2xl: 24px;
-  --text-3xl: 30px;
+  /* ─────────────────────────────────────────────
+     Shadows — subtle, warm
+     ───────────────────────────────────────────── */
+  --shadow-sm: 0 1px 3px rgba(30, 20, 10, 0.08);
+  --shadow-md: 0 4px 12px rgba(30, 20, 10, 0.10);
+  --shadow-lg: 0 8px 24px rgba(30, 20, 10, 0.14);
+  --shadow-xl: 0 16px 40px rgba(30, 20, 10, 0.18);
 
-  --line-tight: 1.2;
-  --line-normal: 1.5;
-  --line-relaxed: 1.7;
-
-  /* Elevation - subtle, premium shadows */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.5);
-
-  /* Layout */
-  --layout-max-width: 1200px;
+  /* ─────────────────────────────────────────────
+     Layout
+     ───────────────────────────────────────────── */
+  --layout-max-width: 1100px;
   --layout-rail-width: 240px;
+  --layout-sidebar-width: 256px;
+  --layout-context-rail-width: 280px;
   --layout-header-height: 64px;
+
+  /* ─────────────────────────────────────────────
+     Paper texture — subtle grain overlay
+     ───────────────────────────────────────────── */
+  --texture-opacity: 0.025;
 }
 
 * {
@@ -124,7 +215,7 @@
 html, body, #root {
   margin: 0;
   padding: 0;
-  background: var(--color-bg);
+  background: var(--color-surface-base);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   font-size: var(--text-base);
@@ -135,6 +226,11 @@ html, body, #root {
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Subtle paper grain texture — soft, never harsh */
+  background-image:
+    radial-gradient(circle at 25% 35%, rgba(139, 115, 53, var(--texture-opacity)) 0%, transparent 50%),
+    radial-gradient(circle at 75% 65%, rgba(80, 60, 30, var(--texture-opacity)) 0%, transparent 50%);
+  background-attachment: fixed;
 }
 
 a {
@@ -162,11 +258,10 @@ input, textarea, select {
 :focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
 ::selection {
-  background: rgba(138, 138, 196, 0.30);
+  background: var(--color-gold-bg);
   color: var(--color-text-primary);
 }
 
@@ -180,17 +275,63 @@ input, textarea, select {
   }
 }
 
+/* ─────────────────────────────────────────────
+   Institutional Frame Layout
+   ───────────────────────────────────────────── */
+.ledger-app-shell {
+  display: grid;
+  grid-template-columns: var(--layout-sidebar-width) 1fr;
+  min-height: 100vh;
+  background: var(--color-institution-navy);
+}
+
+.ledger-app-shell > main {
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--color-surface-base);
+  position: relative;
+}
+
+.ledger-app-shell > main::before {
+  /* Subtle paper edge — institutional frame effect */
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--color-gold-muted) 20%,
+    var(--color-gold) 50%,
+    var(--color-gold-muted) 80%,
+    transparent 100%
+  );
+  opacity: 0.3;
+  z-index: 10;
+  pointer-events: none;
+}
+
 /* Responsive: collapse sidebar into a top bar on small screens */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .ledger-app-shell {
-    grid-template-columns: 1fr !important;
-  }
-  .ledger-deal-detail-grid {
     grid-template-columns: 1fr !important;
   }
   .ledger-app-shell > aside {
     position: relative !important;
     height: auto !important;
     width: 100% !important;
+  }
+  .ledger-deal-detail-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .ledger-record-actions {
+    grid-template-columns: 1fr !important;
+  }
+  .ledger-register-headers,
+  .ledger-register-row {
+    grid-template-columns: 40px 1fr 1fr 100px 100px 80px !important;
   }
 }

@@ -1,31 +1,32 @@
 /**
  * pages/DealsPage.tsx
  *
- * The deals list — all deals with filter + search.
+ * Record Index — the official register of all deal records.
+ *
+ * Presented as an archival folio:
+ * - Top: "REGISTER OF RECORDS" with search + filter tabs
+ * - Body: ruled rows with folio numbers, parties, value, status, updated
+ * - Each row: parchment alternating backgrounds, ruled borders
  *
  * Uses:
  *   - useDeals() hook for data
  *   - DealStateBadge + DEAL_STATES for status display
  *   - DealListSkeleton / EmptyState / ErrorState for loading/empty/error
- *   - DealStateTimeline for expanded row previews
  *
  * The frontend is purely presentational — all status values come from the
  * authoritative backend, never inferred.
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'motion/react';
-import { Stack, StackItem, Card, Expand, Reveal } from '../motion/components';
-import { DealTimeline, type TimelineStep } from '../motion/DealTimeline';
-import { Button } from '../components/ui';
-import { DealStateBadge } from '../components/DealStateBadge';
-import { DealListSkeleton, EmptyState, ErrorState } from '../components/DealStateViews';
+import { motion, AnimatePresence } from 'motion/react';
 import { useDeals, filterDeals } from '../hooks/useDeals';
 import { useReducedMotion } from '../motion/hooks';
-import { useHoverPress } from '../motion/hooks';
 import { duration, easing } from '../motion/variants';
-import { getDealStateConfig, DEAL_STATE_ORDER, type DealStatus } from '../types/dealStates';
+import { DealListSkeleton, EmptyState, ErrorState } from '../components/DealStateViews';
+import { Button } from '../components/ui';
+import { DealStateBadge } from '../components/DealStateBadge';
+import { getDealStateConfig } from '../types/dealStates';
 import type { DealSummary } from '../types/deal';
 
 // ---------------------------------------------------------------------------
@@ -38,7 +39,7 @@ interface Filter {
 }
 
 const FILTERS: Filter[] = [
-  { label: 'All Deals', value: 'all' },
+  { label: 'All Records', value: 'all' },
   { label: 'Active', value: 'active' },
   { label: 'Completed', value: 'completed' },
   { label: 'Disputed', value: 'disputed' },
@@ -57,138 +58,169 @@ export function DealsPage() {
   const { deals, loading, error, refetch } = useDeals();
   const reduced = useReducedMotion();
 
-  const filtered = filterDeals(deals, activeFilter, searchQuery);
+  const filtered = useMemo(
+    () => filterDeals(deals, activeFilter, searchQuery),
+    [deals, activeFilter, searchQuery]
+  );
 
   return (
     <div
       style={{
-        maxWidth: 'var(--layout-max-width)',
+        maxWidth: 920,
         margin: '0 auto',
-        padding: 'var(--space-7) var(--space-5)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-6)',
+        padding: 'var(--space-7) var(--space-6) var(--space-8)',
       }}
     >
-      {/* Header */}
+      {/* ─── REGISTER HEADER ────────────────────────────────────── */}
       <motion.header
-        initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
+        initial={reduced ? { opacity: 0 } : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: duration.normal, ease: easing.out }}
-        style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}
       >
-        <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 600, margin: 0 }}>
-          Deals
-        </h1>
-        <p style={{ color: 'var(--color-text-secondary)', margin: 0, fontSize: 'var(--text-md)' }}>
-          {loading ? 'Loading…' : `${filtered.length} deal${filtered.length !== 1 ? 's' : ''}`}
-          {activeFilter !== 'all' && ' (filtered)'}
-          {searchQuery && ` matching "${searchQuery}"`}
-        </p>
-      </motion.header>
-
-      {/* Search + Filters */}
-      <Reveal>
+        {/* Archival label */}
         <div
           style={{
             display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-3)',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 'var(--space-3)',
           }}
         >
-          {/* Search */}
-          <div style={{ position: 'relative' }}>
-            <SearchIcon />
-            <input
-              type="search"
-              placeholder="Search by title or counterparty…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search deals"
-              style={{
-                width: '100%',
-                padding: '9px 12px 9px 36px',
-                background: 'var(--color-surface-2)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--color-text-primary)',
-                fontSize: 'var(--text-sm)',
-                outline: 'none',
-                transition: 'border-color 0.15s',
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = 'var(--color-focus)';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = 'var(--color-border)';
-              }}
-            />
-          </div>
-
-          {/* Filter tabs */}
-          <div
+          <span
             style={{
-              display: 'flex',
-              gap: 'var(--space-2)',
-              flexWrap: 'wrap',
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.16em',
+              color: 'var(--color-text-faint)',
             }}
-            role="tablist"
-            aria-label="Filter deals"
           >
-            {FILTERS.map((filter) => (
-              <motion.button
+            Register of Records
+          </span>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-faint)',
+              letterSpacing: '0.06em',
+            }}
+          >
+            {loading ? '—' : `${filtered.length} entr${filtered.length !== 1 ? 'ies' : 'y'}`}
+          </span>
+        </div>
+
+        {/* Title */}
+        <h1
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(24px, 4vw, 32px)',
+            fontWeight: 600,
+            color: 'var(--color-text-primary)',
+            letterSpacing: '-0.02em',
+            margin: 0,
+            lineHeight: 1.15,
+          }}
+        >
+          Deal Records
+        </h1>
+
+        {/* Top rule */}
+        <div style={{ borderTop: '1px solid var(--color-border-strong)', marginTop: 'var(--space-5)' }} />
+      </motion.header>
+
+      {/* ─── SEARCH + FILTERS ────────────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-4)',
+          paddingTop: 'var(--space-5)',
+          paddingBottom: 'var(--space-4)',
+        }}
+      >
+        {/* Search */}
+        <div style={{ position: 'relative' }}>
+          <SearchIcon />
+          <input
+            type="search"
+            placeholder="Search by title or counterparty…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search records"
+            style={{
+              width: '100%',
+              padding: '8px 12px 8px 36px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: '1px solid var(--color-border)',
+              color: 'var(--color-text-primary)',
+              fontSize: 'var(--text-sm)',
+              outline: 'none',
+              transition: 'border-color 0.15s',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderBottomColor = 'var(--color-text-primary)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderBottomColor = 'var(--color-border)';
+            }}
+          />
+        </div>
+
+        {/* Filter tabs — text-only, no pill backgrounds */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 'var(--space-5)',
+            flexWrap: 'wrap',
+            borderBottom: '1px solid var(--color-border)',
+          }}
+          role="tablist"
+          aria-label="Filter records"
+        >
+          {FILTERS.map((filter) => {
+            const isActive = activeFilter === filter.value;
+            return (
+              <button
                 key={filter.value}
                 role="tab"
-                aria-selected={activeFilter === filter.value}
+                aria-selected={isActive}
                 onClick={() => setActiveFilter(filter.value)}
-                whileTap={!reduced ? { scale: 0.96 } : undefined}
-                transition={{ duration: duration.fast, ease: easing.snap }}
                 style={{
-                  padding: '6px 14px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid',
-                  borderColor:
-                    activeFilter === filter.value
-                      ? 'var(--color-border-strong)'
-                      : 'var(--color-border)',
-                  background:
-                    activeFilter === filter.value
-                      ? 'var(--color-surface-2)'
-                      : 'transparent',
-                  color:
-                    activeFilter === filter.value
-                      ? 'var(--color-text-primary)'
-                      : 'var(--color-text-tertiary)',
+                  padding: '8px 0',
+                  border: 'none',
+                  borderBottom: isActive ? '2px solid var(--color-text-primary)' : '2px solid transparent',
+                  marginBottom: '-1px',
+                  background: 'transparent',
+                  color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
                   fontSize: 'var(--text-sm)',
-                  fontWeight: activeFilter === filter.value ? 500 : 400,
+                  fontWeight: isActive ? 500 : 400,
                   cursor: 'pointer',
-                  transition: 'border-color 0.15s, background 0.15s, color 0.15s',
+                  transition: 'color 0.15s, border-color 0.15s',
+                  letterSpacing: '0.01em',
                 }}
               >
                 {filter.label}
-              </motion.button>
-            ))}
-          </div>
+              </button>
+            );
+          })}
         </div>
-      </Reveal>
+      </div>
 
-      {/* Content */}
+      {/* ─── REGISTER BODY ──────────────────────────────────────── */}
       {loading ? (
         <DealListSkeleton count={5} />
       ) : error ? (
-        <ErrorState
-          message={error}
-          onRetry={refetch}
-        />
+        <ErrorState title="Register access interrupted" message={error} onRetry={refetch} />
       ) : filtered.length === 0 ? (
         <EmptyState
-          title="No deals found"
+          title="No records found"
           description={
             searchQuery
-              ? `No deals match "${searchQuery}". Try a different search term.`
+              ? `No records match "${searchQuery}". Try a different search term.`
               : activeFilter !== 'all'
-              ? `No deals in this category.`
-              : `No deals yet.`
+              ? `No records in this category.`
+              : `The register is empty.`
           }
           action={
             (searchQuery || activeFilter !== 'all') ? (
@@ -206,161 +238,170 @@ export function DealsPage() {
           }
         />
       ) : (
-        <Stack
-          staggerDelay={0.05}
-          style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}
-        >
-          {filtered.map((deal) => (
-            <StackItem key={deal.id} style={{ display: 'block' }}>
-              <DealRow deal={deal} />
-            </StackItem>
-          ))}
-        </Stack>
+        <RecordRegister entries={filtered} />
       )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// DealRow — expandable list item
+// RecordRegister — folio table
 // ---------------------------------------------------------------------------
 
-function DealRow({ deal }: { deal: DealSummary }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+function RecordRegister({ entries }: { entries: DealSummary[] }) {
   const reduced = useReducedMotion();
-  const press = useHoverPress({ disabled: reduced });
 
+  return (
+    <motion.div
+      initial={reduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: duration.normal, ease: easing.out }}
+      style={{ marginTop: 'var(--space-4)' }}
+    >
+      {/* Column headers */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '56px 1fr 1.4fr 130px 130px 110px',
+          gap: 'var(--space-3)',
+          padding: '8px 0',
+          borderBottom: '1px solid var(--color-border-strong)',
+        }}
+        className="ledger-register-headers"
+      >
+        {['No.', 'Record', 'Parties', 'Value', 'Status', 'Updated'].map((h) => (
+          <span
+            key={h}
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.14em',
+              color: 'var(--color-text-faint)',
+            }}
+          >
+            {h}
+          </span>
+        ))}
+      </div>
+
+      {/* Entries */}
+      <AnimatePresence initial={false}>
+        {entries.map((deal, i) => (
+          <RecordRow key={deal.id} deal={deal} folio={i + 1} />
+        ))}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function RecordRow({ deal, folio }: { deal: DealSummary; folio: number }) {
+  const reduced = useReducedMotion();
   const statusConfig = getDealStateConfig(deal.status);
 
   return (
-    <Card interactive style={{ overflow: 'hidden' }}>
-      <motion.button
-        onClick={() => setIsExpanded(!isExpanded)}
-        whileTap={press.whileTap}
-        transition={press.transition}
-        aria-expanded={isExpanded}
-        aria-label={`${deal.title} — ${statusConfig?.label ?? deal.status}. Click to ${isExpanded ? 'collapse' : 'expand'}.`}
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr auto',
-          gap: 'var(--space-3)',
-          alignItems: 'center',
-          padding: 'var(--space-5)',
-          width: '100%',
-          textAlign: 'left',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          color: 'inherit',
-        }}
+    <motion.div
+      layout
+      initial={reduced ? { opacity: 0 } : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={reduced ? { opacity: 0 } : { opacity: 0 }}
+      transition={{ duration: duration.normal, ease: easing.out }}
+    >
+      <Link
+        to={`/deals/${deal.id}`}
+        style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
+        aria-label={`${deal.title} — ${statusConfig?.label ?? deal.status}`}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', minWidth: 0 }}>
+        <motion.div
+          whileHover={!reduced ? { backgroundColor: 'rgba(184, 160, 120, 0.06)' } : undefined}
+          transition={{ duration: duration.fast, ease: easing.out }}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '56px 1fr 1.4fr 130px 130px 110px',
+            gap: 'var(--space-3)',
+            padding: 'var(--space-3) 0',
+            borderBottom: '1px solid var(--color-border)',
+            alignItems: 'center',
+            cursor: 'pointer',
+          }}
+          className="ledger-register-row"
+        >
+          {/* Folio number */}
           <span
             style={{
-              fontWeight: 600,
-              fontSize: 'var(--text-md)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-faint)',
+              letterSpacing: '0.04em',
+            }}
+          >
+            {String(folio).padStart(3, '0')}
+          </span>
+
+          {/* Record title */}
+          <span
+            style={{
+              fontSize: 'var(--text-sm)',
+              fontWeight: 500,
+              color: 'var(--color-text-primary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              paddingRight: 'var(--space-2)',
+            }}
+            title={deal.title}
+          >
+            {deal.title}
+          </span>
+
+          {/* Parties */}
+          <span
+            style={{
+              fontSize: 'var(--text-sm)',
+              color: 'var(--color-text-secondary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}
+            title={deal.counterparties}
           >
-            {deal.title}
-          </span>
-          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
             {deal.counterparties}
           </span>
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            gap: 'var(--space-2)',
-            flexShrink: 0,
-          }}
-        >
-          <DealStateBadge status={deal.status} size="sm" />
+
+          {/* Value */}
           <span
             style={{
-              fontSize: 'var(--text-md)',
-              fontWeight: 600,
               fontFamily: 'var(--font-mono)',
+              fontSize: 'var(--text-sm)',
+              color: 'var(--color-text-primary)',
+              fontWeight: 500,
             }}
           >
             {deal.amountFormatted}
           </span>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-            {deal.updatedAtRelative}
-          </span>
-        </div>
-      </motion.button>
 
-      {/* Expandable area — preview timeline + view action */}
-      <Expand isOpen={isExpanded}>
-        <div
-          style={{
-            padding: 'var(--space-4) var(--space-5)',
-            borderTop: '1px solid var(--color-border)',
-            background: 'var(--color-surface-2)',
-            display: 'grid',
-            gridTemplateColumns: '1fr auto',
-            gap: 'var(--space-6)',
-            alignItems: 'start',
-          }}
-        >
-          <DealTimeline
-            steps={buildPreviewSteps(deal.status)}
-            currentId={getCurrentStepId(deal.status)}
-          />
-          <div
+          {/* Status */}
+          <span>
+            <DealStateBadge status={deal.status} size="sm" />
+          </span>
+
+          {/* Updated */}
+          <span
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-2)',
-              alignItems: 'flex-end',
+              fontSize: 'var(--text-xs)',
+              color: 'var(--color-text-tertiary)',
             }}
           >
-            <Link to={`/deals/${deal.id}`} style={{ textDecoration: 'none' }}>
-              <Button size="sm" variant="secondary">
-                View Deal →
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </Expand>
-    </Card>
+            {deal.updatedAtRelative}
+          </span>
+        </motion.div>
+      </Link>
+    </motion.div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Timeline helpers (presentational — data comes from backend)
-// ---------------------------------------------------------------------------
-
-function buildPreviewSteps(status: DealStatus): TimelineStep[] {
-  const all = DEAL_STATE_ORDER;
-  const config = getDealStateConfig(status);
-  const currentOrder = config?.order ?? 0;
-
-  return all.slice(0, Math.min(currentOrder + 3, all.length)).map((s) => {
-    const cfg = getDealStateConfig(s);
-    const order = cfg?.order ?? 0;
-    let stepStatus: 'completed' | 'pending' | 'accepted' = 'accepted';
-    if (order < currentOrder) stepStatus = 'completed';
-    if (order === currentOrder) stepStatus = 'pending';
-    return {
-      id: s,
-      label: cfg?.label ?? s,
-      status: stepStatus,
-    };
-  });
-}
-
-function getCurrentStepId(status: DealStatus): string {
-  return status;
-}
-
-// ---------------------------------------------------------------------------
-// SearchIcon — inline magnifier for the search input
+// SearchIcon — inline magnifier
 // ---------------------------------------------------------------------------
 
 function SearchIcon() {
@@ -373,7 +414,7 @@ function SearchIcon() {
       aria-hidden
       style={{
         position: 'absolute',
-        left: 12,
+        left: 0,
         top: '50%',
         transform: 'translateY(-50%)',
         color: 'var(--color-text-tertiary)',

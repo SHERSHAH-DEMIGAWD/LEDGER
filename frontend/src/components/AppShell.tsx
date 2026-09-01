@@ -1,8 +1,15 @@
 /**
  * components/AppShell.tsx
  *
- * Top-level layout: header + side navigation + main content.
- * Navigation uses layoutId for the selected item highlight.
+ * Institutional ledger frame: permanent sidebar spine + main content area.
+ *
+ * Navigation is organized around the constitutional casebook metaphor:
+ *   RECORD  — Deals, Invitations (the actual contracts)
+ *   ACTIVITY — Activity Log
+ *
+ * The sidebar is a dark institutional frame (navy/brown) that conveys
+ * trust, permanence, and authority. The main content area uses warm
+ * parchment surfaces, evoking real legal/financial documents.
  */
 
 import { type ReactNode } from 'react';
@@ -16,27 +23,20 @@ interface NavItem {
   label: string;
   /** Stable id used for layoutId of the active indicator */
   layoutId: string;
-  icon?: ReactNode;
+  category: string;
 }
 
 const NAV: NavItem[] = [
-  { to: '/', label: 'Dashboard', layoutId: 'nav-dashboard' },
-  { to: '/deals', label: 'Deals', layoutId: 'nav-deals' },
-  { to: '/invitations', label: 'Invitations', layoutId: 'nav-invitations' },
+  { to: '/', label: 'Dashboard', layoutId: 'nav-dashboard', category: 'HOME' },
+  { to: '/deals', label: 'Deals', layoutId: 'nav-deals', category: 'RECORD' },
+  { to: '/invitations', label: 'Invitations', layoutId: 'nav-invitations', category: 'RECORD' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        gridTemplateColumns: '240px 1fr',
-      }}
-      className="ledger-app-shell"
-    >
+    <div className="ledger-app-shell">
       <Sidebar />
-      <main style={{ minWidth: 0, overflow: 'hidden' }}>{children}</main>
+      <main>{children}</main>
     </div>
   );
 }
@@ -45,61 +45,151 @@ function Sidebar() {
   return (
     <aside
       style={{
-        background: 'var(--color-surface-1)',
-        borderRight: '1px solid var(--color-border)',
-        padding: 'var(--space-5) var(--space-4)',
+        background: 'linear-gradient(180deg, var(--color-institution-navy-mid) 0%, var(--color-institution-navy) 100%)',
+        borderRight: '1px solid var(--color-border-dark)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 'var(--space-5)',
         position: 'sticky',
         top: 0,
         height: '100vh',
+        overflowY: 'auto',
       }}
+      className="ledger-sidebar"
     >
+      {/* Top: Identity header */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-2)',
-          padding: '0 var(--space-2)',
+          padding: 'var(--space-6) var(--space-5) var(--space-5)',
+          borderBottom: '1px solid var(--color-border-dark-surface)',
         }}
       >
-        <Logo />
-        <span style={{ fontWeight: 600, fontSize: 'var(--text-md)' }}>Ledger</span>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-3)',
+          }}
+        >
+          {/* Ledger seal mark */}
+          <div style={{ position: 'relative' }}>
+            <svg width="36" height="36" viewBox="0 0 48 48" fill="none">
+              {/* Outer ring */}
+              <circle cx="24" cy="24" r="22" stroke="var(--color-gold)" strokeWidth="1.5" opacity="0.6" />
+              {/* Inner seal */}
+              <circle cx="24" cy="24" r="18" stroke="var(--color-gold)" strokeWidth="0.75" opacity="0.3" />
+              {/* Ledger book icon */}
+              <rect x="12" y="14" width="24" height="20" rx="1.5" stroke="var(--color-gold)" strokeWidth="1.5" fill="none" />
+              {/* Book spine */}
+              <line x1="12" y1="20" x2="36" y2="20" stroke="var(--color-gold)" strokeWidth="1" opacity="0.7" />
+              {/* Lines on page */}
+              <line x1="16" y1="24" x2="30" y2="24" stroke="var(--color-gold)" strokeWidth="0.75" opacity="0.5" />
+              <line x1="16" y1="28" x2="28" y2="28" stroke="var(--color-gold)" strokeWidth="0.75" opacity="0.5" />
+            </svg>
+          </div>
+          <div>
+            <div
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'var(--text-xl)',
+                fontWeight: 600,
+                color: 'var(--color-text-on-dark)',
+                lineHeight: 1.1,
+                letterSpacing: '-0.01em',
+              }}
+            >
+              Ledger
+            </div>
+            <div
+              style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-gold)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                marginTop: 2,
+              }}
+            >
+              Records &amp; Contracts
+            </div>
+          </div>
+        </div>
       </div>
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {NAV.map((item) => (
-          <NavItem key={item.to} item={item} />
+      {/* Navigation organized by category */}
+      <nav
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-5)',
+          padding: 'var(--space-5) var(--space-4)',
+          flex: 1,
+        }}
+      >
+        {(['HOME', 'RECORD'] as const).map((category) => (
+          <div key={category}>
+            <div
+              style={{
+                fontSize: '9px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.14em',
+                color: 'var(--color-text-on-dark-muted)',
+                padding: '0 var(--space-3) var(--space-2)',
+              }}
+            >
+              {category}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {NAV.filter(item => item.category === category).map((item) => (
+                <NavItem key={item.to} item={item} />
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
-      <div style={{ flex: 1 }} />
-
+      {/* Bottom: Version + institutional seal */}
       <div
         style={{
-          fontSize: 'var(--text-xs)',
-          color: 'var(--color-text-muted)',
-          padding: '0 var(--space-2)',
+          padding: 'var(--space-4) var(--space-5)',
+          borderTop: '1px solid var(--color-border-dark-surface)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
         }}
       >
-        v0.1.0
+        <span
+          style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--color-text-on-dark-muted)',
+          }}
+        >
+          Est. 2026
+        </span>
+        {/* Small decorative seal */}
+        <div
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: '50%',
+            border: '1px solid var(--color-gold)',
+            opacity: 0.4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: 'var(--color-gold)',
+              opacity: 0.6,
+            }}
+          />
+        </div>
       </div>
     </aside>
-  );
-}
-
-function Logo() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-      <rect width="32" height="32" rx="6" fill="var(--color-surface-3)" />
-      <path
-        d="M8 10h16M8 16h12M8 22h8"
-        stroke="var(--color-text-primary)"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
   );
 }
 
@@ -118,37 +208,79 @@ function NavItem({ item }: { item: NavItem }) {
           transition={{ duration: duration.fast, ease: easing.snap }}
           style={{
             position: 'relative',
-            padding: '8px 12px',
-            borderRadius: 'var(--radius-md)',
+            padding: '8px var(--space-3)',
+            borderRadius: 'var(--radius-sm)',
             color: isActive
-              ? 'var(--color-text-primary)'
-              : 'var(--color-text-tertiary)',
+              ? 'var(--color-gold-pale)'
+              : 'var(--color-text-on-dark-secondary)',
             fontSize: 'var(--text-sm)',
             fontWeight: isActive ? 500 : 400,
             display: 'flex',
             alignItems: 'center',
-            gap: 'var(--space-2)',
+            gap: 'var(--space-3)',
+            transition: 'color 0.15s',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => {
+            if (!isActive) {
+              (e.currentTarget as HTMLElement).style.color = 'var(--color-text-on-dark)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isActive) {
+              (e.currentTarget as HTMLElement).style.color = 'var(--color-text-on-dark-secondary)';
+            }
           }}
         >
           {isActive && (
+            <>
+              {/* Left accent bar */}
+              <motion.div
+                layoutId={item.layoutId + '-bar'}
+                transition={{
+                  duration: reduced ? 0 : duration.normal,
+                  ease: easing.inOut,
+                }}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: '20%',
+                  bottom: '20%',
+                  width: 2,
+                  background: 'var(--color-gold)',
+                  borderRadius: '0 2px 2px 0',
+                }}
+                aria-hidden
+              />
+            </>
+          )}
+          <span
+            style={{
+              position: 'relative',
+              zIndex: 1,
+            }}
+          >
+            {item.label}
+          </span>
+          {isActive && (
             <motion.span
-              layoutId={item.layoutId}
+              layoutId={item.layoutId + '-dot'}
               transition={{
                 duration: reduced ? 0 : duration.normal,
                 ease: easing.inOut,
               }}
               style={{
                 position: 'absolute',
-                inset: 0,
-                background: 'var(--color-surface-2)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)',
-                zIndex: 0,
+                right: 'var(--space-3)',
+                width: 4,
+                height: 4,
+                borderRadius: '50%',
+                background: 'var(--color-gold)',
+                opacity: 0.6,
               }}
               aria-hidden
             />
           )}
-          <span style={{ position: 'relative', zIndex: 1 }}>{item.label}</span>
         </motion.div>
       )}
     </NavLink>

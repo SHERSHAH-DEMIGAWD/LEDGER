@@ -67,21 +67,21 @@ export function UserSwitcher() {
           display: 'flex',
           alignItems: 'center',
           gap: 'var(--space-2)',
-          padding: '6px 10px 6px 6px',
-          background: 'var(--color-surface-1)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
+          padding: '5px 10px 5px 5px',
+          background: 'var(--color-parchment-cream)',
+          border: '1px solid var(--color-border-strong)',
+          borderRadius: 'var(--radius-sm)',
           fontSize: 'var(--text-sm)',
           color: 'var(--color-text-primary)',
           cursor: 'pointer',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          boxShadow: 'var(--shadow-sm)',
           transition: 'all 0.15s',
         }}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-2)';
+          (e.currentTarget as HTMLElement).style.background = 'var(--color-parchment-warm)';
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-1)';
+          (e.currentTarget as HTMLElement).style.background = 'var(--color-parchment-cream)';
         }}
       >
         <Avatar name={active?.name ?? user.name} role={user.role} />
@@ -90,8 +90,10 @@ export function UserSwitcher() {
           <span
             style={{
               fontSize: 'var(--text-xs)',
-              color: 'var(--color-text-muted)',
+              color: 'var(--color-text-tertiary)',
               lineHeight: 1.2,
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
             }}
           >
             {user.role}
@@ -105,7 +107,7 @@ export function UserSwitcher() {
           style={{
             transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.15s',
-            color: 'var(--color-text-muted)',
+            color: 'var(--color-text-tertiary)',
           }}
         >
           <path
@@ -132,9 +134,9 @@ export function UserSwitcher() {
               width: '320px',
               maxHeight: '480px',
               overflowY: 'auto',
-              background: 'var(--color-surface-1)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)',
+              background: 'var(--color-parchment-cream)',
+              border: '1px solid var(--color-border-strong)',
+              borderRadius: 'var(--radius-sm)',
               boxShadow: 'var(--shadow-lg)',
               padding: 'var(--space-2)',
             }}
@@ -144,9 +146,9 @@ export function UserSwitcher() {
                 fontSize: 'var(--text-xs)',
                 fontWeight: 600,
                 textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                color: 'var(--color-text-muted)',
-                padding: 'var(--space-2)',
+                letterSpacing: '0.1em',
+                color: 'var(--color-text-tertiary)',
+                padding: 'var(--space-2) var(--space-3) var(--space-1)',
               }}
             >
               Switch persona
@@ -185,7 +187,7 @@ export function UserSwitcher() {
                   cursor: 'pointer',
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-2)';
+                  (e.currentTarget as HTMLElement).style.background = 'var(--color-parchment-warm)';
                 }}
                 onMouseLeave={(e) => {
                   (e.currentTarget as HTMLElement).style.background = 'transparent';
@@ -280,13 +282,14 @@ function Avatar({ name, role, small }: { name: string; role: string; small?: boo
     .slice(0, 2)
     .toUpperCase();
 
-  const colors: Record<string, string> = {
-    BRAND: '#5b8def',
-    CREATOR: '#f59e0b',
-    ADMIN: '#a855f7',
-    HRT: '#10b981',
+  // Restrained, desaturated colors that fit the casebook aesthetic
+  const colors: Record<string, { bg: string; fg: string }> = {
+    BRAND: { bg: '#3a5a8a', fg: '#f0e8d8' },
+    CREATOR: { bg: '#8a6a2a', fg: '#f0e8d8' },
+    ADMIN: { bg: '#5a3a7a', fg: '#f0e8d8' },
+    HRT: { bg: '#2a6a4a', fg: '#f0e8d8' },
   };
-  const bg = colors[role] ?? '#888';
+  const palette = colors[role] ?? { bg: '#6a5a4a', fg: '#f0e8d8' };
 
   return (
     <div
@@ -294,14 +297,15 @@ function Avatar({ name, role, small }: { name: string; role: string; small?: boo
         width: size,
         height: size,
         borderRadius: '50%',
-        background: bg,
-        color: '#fff',
+        background: palette.bg,
+        color: palette.fg,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: small ? '11px' : '12px',
         fontWeight: 600,
         flexShrink: 0,
+        fontFamily: 'var(--font-sans)',
       }}
     >
       {initials}

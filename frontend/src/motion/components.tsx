@@ -20,7 +20,7 @@ import {
   duration,
   easing,
 } from './variants';
-import { useReducedMotion, usePageTransition, useHoverPress } from './hooks';
+import { useReducedMotion, useHoverPress } from './hooks';
 
 // ---------------------------------------------------------------------------
 // Page — wraps page content in a page-level enter/exit
@@ -34,24 +34,17 @@ export interface PageProps {
 /**
  * The outer wrapper for every page. Use inside `AnimatePresence` in
  * your router for page-to-page transitions.
+ *
+ * Note: Page-level enter/exit animation is handled by the AnimatedRouteWrapper
+ * in App.tsx, which manages direction-aware transitions (horizontal for normal
+ * navigation, vertical for deal-to-deal navigation). The Page component here
+ * provides a stable container that applies layout + className props.
  */
 export function Page({ children, className }: PageProps) {
-  const reduced = useReducedMotion();
-  const pt = usePageTransition();
-
   return (
-    <motion.div
-      className={className}
-      initial={pt.initial}
-      animate={pt.animate}
-      exit={pt.exit}
-      transition={{
-        duration: reduced ? 0 : duration.slow,
-        ease: easing.inOut,
-      }}
-    >
+    <div className={className}>
       {children}
-    </motion.div>
+    </div>
   );
 }
 
@@ -412,8 +405,8 @@ export function Modal({
             style={{
               background: 'var(--color-surface-1)',
               border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-lg)',
-              boxShadow: 'var(--shadow-3)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-xl)',
               maxWidth: 560,
               width: '100%',
               maxHeight: '90vh',
@@ -504,7 +497,7 @@ export function Drawer({
               width: 'min(420px, 100%)',
               background: 'var(--color-surface-1)',
               border: '1px solid var(--color-border)',
-              boxShadow: 'var(--shadow-3)',
+              boxShadow: 'var(--shadow-xl)',
               display: 'flex',
               flexDirection: 'column',
             }}
@@ -526,12 +519,12 @@ export interface SkeletonProps {
   height?: number | string;
   borderRadius?: number | string;
   className?: string;
+  style?: React.CSSProperties;
 }
 
 /**
  * A subtle, non-perpetual skeleton block.
- * Per Ledger's animation philosophy, skeletons pulse once on enter
- * (so we never create distracting perpetual motion) and then settle
+ * Per Ledger's animation philosophy, skeletons fade in once and then settle
  * into a calm static state with a low-contrast hue.
  */
 export function Skeleton({
@@ -539,6 +532,7 @@ export function Skeleton({
   height = 16,
   borderRadius = 'var(--radius-sm)',
   className,
+  style,
 }: SkeletonProps) {
   const reduced = useReducedMotion();
 
@@ -553,6 +547,7 @@ export function Skeleton({
         height,
         borderRadius,
         background: 'var(--color-surface-3)',
+        ...style,
       }}
     />
   );

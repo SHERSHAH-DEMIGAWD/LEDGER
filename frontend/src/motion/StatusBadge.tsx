@@ -12,7 +12,6 @@
 
 import { motion } from 'motion/react';
 import type { HTMLMotionProps } from 'motion/react';
-import { useReducedMotion } from './hooks';
 
 // ---------------------------------------------------------------------------
 // Status definitions
@@ -139,7 +138,6 @@ export function StatusBadge({
   style,
   ...rest
 }: StatusBadgeProps) {
-  const reduced = useReducedMotion();
   const config = STATUS_MAP[status as Status] ?? UNKNOWN_STATUS;
   const label = children ?? config.label;
 
@@ -173,18 +171,7 @@ export function StatusBadge({
       {...rest}
     >
       {dotVisible && (
-        <motion.span
-          key={`dot-${status}`}
-          initial={reduced ? { opacity: 1 } : { opacity: 0 }}
-          // Subtle pulse for active states — restrained, not distracting
-          animate={
-            !reduced && dotVisible ? { opacity: [1, 0.5, 1] } : { opacity: 1 }
-          }
-          transition={
-            !reduced && dotVisible
-              ? { duration: 2.4, repeat: Infinity, ease: 'linear' }
-              : {}
-          }
+        <span
           style={{
             width: dotSizes[size],
             height: dotSizes[size],

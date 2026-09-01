@@ -65,17 +65,19 @@ export function RegisterPage() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: 'var(--space-6)',
-        background: 'var(--color-surface-base)',
+        background: 'var(--color-institution-navy)',
         gap: 'var(--space-6)',
       }}
     >
       <div style={{ textAlign: 'center' }}>
         <h1
           style={{
+            fontFamily: 'var(--font-display)',
             fontSize: 'var(--text-xl)',
-            fontWeight: 700,
+            fontWeight: 600,
             margin: 0,
-            color: 'var(--color-text-primary)',
+            color: 'var(--color-text-on-dark)',
+            letterSpacing: '-0.01em',
           }}
         >
           Create your Ledger account
@@ -86,9 +88,9 @@ export function RegisterPage() {
         style={{
           width: '100%',
           maxWidth: '420px',
-          background: 'var(--color-surface-1)',
+          background: 'var(--color-parchment-warm)',
           border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-lg)',
+          borderRadius: 'var(--radius-md)',
           padding: 'var(--space-6)',
           boxShadow: 'var(--shadow-md)',
         }}
@@ -118,10 +120,10 @@ export function RegisterPage() {
               onClick={() => navigate('/login')}
               style={{
                 padding: '10px 16px',
-                background: 'var(--color-accent)',
-                color: '#fff',
+                background: 'var(--color-institution-navy)',
+                color: 'var(--color-text-on-dark)',
                 border: 'none',
-                borderRadius: 'var(--radius-md)',
+                borderRadius: 'var(--radius-sm)',
                 fontWeight: 600,
                 fontSize: 'var(--text-sm)',
                 cursor: 'pointer',
@@ -198,12 +200,18 @@ export function RegisterPage() {
                       flex: 1,
                       padding: '8px 12px',
                       background:
-                        role === r ? 'var(--color-accent)' : 'var(--color-surface-2)',
-                      color: role === r ? '#fff' : 'var(--color-text-primary)',
+                        role === r
+                          ? 'var(--color-institution-navy)'
+                          : 'var(--color-parchment)',
+                      color: role === r
+                        ? 'var(--color-text-on-dark)'
+                        : 'var(--color-text-primary)',
                       border: `1px solid ${
-                        role === r ? 'var(--color-accent)' : 'var(--color-border)'
+                        role === r
+                          ? 'var(--color-institution-navy)'
+                          : 'var(--color-border)'
                       }`,
-                      borderRadius: 'var(--radius-md)',
+                      borderRadius: 'var(--radius-sm)',
                       fontWeight: role === r ? 600 : 500,
                       fontSize: 'var(--text-sm)',
                       cursor: 'pointer',
@@ -219,11 +227,11 @@ export function RegisterPage() {
               <div
                 style={{
                   fontSize: 'var(--text-sm)',
-                  color: 'var(--color-error)',
-                  background: 'color-mix(in srgb, var(--color-error) 10%, transparent)',
+                  color: 'var(--color-status-disputed)',
+                  background: 'var(--color-status-disputed-bg)',
                   padding: 'var(--space-2) var(--space-3)',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid color-mix(in srgb, var(--color-error) 30%, transparent)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--color-status-disputed)',
                 }}
               >
                 {error}
@@ -235,10 +243,10 @@ export function RegisterPage() {
               disabled={loading}
               style={{
                 padding: '10px 16px',
-                background: 'var(--color-accent)',
-                color: '#fff',
+                background: 'var(--color-institution-navy)',
+                color: 'var(--color-text-on-dark)',
                 border: 'none',
-                borderRadius: 'var(--radius-md)',
+                borderRadius: 'var(--radius-sm)',
                 fontWeight: 600,
                 fontSize: 'var(--text-sm)',
                 cursor: loading ? 'wait' : 'pointer',
@@ -251,9 +259,9 @@ export function RegisterPage() {
         )}
       </div>
 
-      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-tertiary)', margin: 0 }}>
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-on-dark-secondary)', margin: 0 }}>
         Already have an account?{' '}
-        <Link to="/login" style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>
+        <Link to="/login" style={{ color: 'var(--color-gold-pale)', textDecoration: 'underline' }}>
           Sign in
         </Link>
       </p>

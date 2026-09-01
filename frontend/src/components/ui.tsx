@@ -30,21 +30,25 @@ export interface ButtonProps extends React.ComponentProps<typeof motion.button> 
 }
 
 const VARIANT_STYLES: Record<ButtonVariant, React.CSSProperties> = {
+  // Primary: institutional navy with on-dark text — used for the highest-emphasis action
   primary: {
-    background: 'var(--color-text-primary)',
-    color: 'var(--color-bg)',
-    border: '1px solid var(--color-text-primary)',
+    background: 'var(--color-institution-navy)',
+    color: 'var(--color-text-on-dark)',
+    border: '1px solid var(--color-institution-navy)',
   },
+  // Secondary: parchment surface, ink border — used for routine actions
   secondary: {
-    background: 'var(--color-surface-2)',
+    background: 'var(--color-parchment-warm)',
     color: 'var(--color-text-primary)',
     border: '1px solid var(--color-border-strong)',
   },
+  // Ghost: text-only, used inline
   ghost: {
     background: 'transparent',
     color: 'var(--color-text-secondary)',
     border: '1px solid transparent',
   },
+  // Danger: muted disputed red on parchment — restrained, never loud
   danger: {
     background: 'var(--color-status-disputed-bg)',
     color: 'var(--color-status-disputed)',
