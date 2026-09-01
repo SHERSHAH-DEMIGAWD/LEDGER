@@ -148,6 +148,8 @@ export function DealDetailPage() {
   // History from the dedicated /history endpoint
   const [historyEvents, setHistoryEvents] = useState<DealEvent[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  // Incremented after a successful state transition so history re-fetches
+  const [historyTick, setHistoryTick] = useState(0);
 
   // Toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -184,7 +186,7 @@ export function DealDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, historyTick]);
 
   const addToast = (message: string, kind: Toast['kind'] = 'success') => {
     const id = `toast-${Date.now()}-${Math.random()}`;
@@ -202,6 +204,8 @@ export function DealDetailPage() {
       const result = await performAction(action, refetch);
       if (result.success) {
         addToast(result.message, 'success');
+        // Refresh history so the new event appears immediately
+        setHistoryTick((t) => t + 1);
       } else {
         addToast(result.message, result.isConflict ? 'conflict' : 'error');
       }
