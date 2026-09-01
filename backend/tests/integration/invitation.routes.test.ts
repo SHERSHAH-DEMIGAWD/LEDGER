@@ -32,7 +32,7 @@ import express, { type Application } from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import type { DealWithVersions } from '../../src/repositories/DealRepository.js';
-import type { DealAction } from '../../src/domain/state-machine/DealStateMachine.js';
+
 import {
   InvalidStateError,
   UnauthorizedAccessError,
