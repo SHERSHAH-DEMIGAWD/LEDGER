@@ -17,13 +17,23 @@
  * authenticates accordingly, falling back to real JWT if the header is
  * absent. This means the same client works in both mock-mode (no backend)
  * and real-backend-mode (with the seeded database).
+ *
+ * Base URL:
+ *   - In development with Vite proxy: defaults to `/api` (relative).
+ *     Vite proxies /api/* → http://localhost:3000/*.
+ *   - In production: VITE_API_BASE_URL should be the full backend URL,
+ *     e.g. https://api.ledger.example.com/api
+ *   - Override with VITE_API_BASE_URL env var if you need a different
+ *     origin (e.g. when serving frontend outside of Vite).
  */
 
 import axios, { type AxiosInstance } from 'axios';
 import { getAccessToken, getMockUserHeader } from './auth';
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
+// Default to relative `/api` so the Vite dev proxy and same-origin production
+// deployments work without additional configuration. Set VITE_API_BASE_URL
+// to override.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 let httpClient: AxiosInstance | null = null;
 

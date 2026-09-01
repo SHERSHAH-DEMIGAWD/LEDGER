@@ -14,6 +14,14 @@
  *
  * The mock data here is presentational only. It mirrors the shape of a
  * real backend response so swapping implementations is frictionless.
+ *
+ * MOCK MODE BEHAVIOR:
+ *   In mock mode, transitions are simulated locally using a state machine
+ *   that mirrors the backend's DealStateMachine. Each seed persona sees
+ *   only the actions authorized for their role on each deal. This is
+ *   what powers the development/demo experience when no backend is
+ *   available. NEVER use this for production — the backend remains the
+ *   source of truth for authorization.
  */
 
 import axios, { type AxiosError } from 'axios';
@@ -21,6 +29,7 @@ import type {
   Deal,
   DealListResponse,
   DealSummary,
+  DealEvent,
 } from '../types/deal';
 import type {
   BackendDeal,
@@ -31,6 +40,7 @@ import type {
 import type { DealStatus } from '../types/dealStates';
 import { normalizeDeal, normalizeDealSummary, normalizeHistoryEntry } from './dealNormalizer';
 import { getHttpClient } from './httpClient';
+import { getMockUser } from './auth';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -55,7 +65,11 @@ const MOCK_LATENCY_MS = 350;
 // Mock dataset
 // ---------------------------------------------------------------------------
 
-const MOCK_DEALS: Deal[] = [
+/**
+ * The static seed data. Individual deal state is managed in the mockStore
+ * to support state transitions during the demo.
+ */
+const MOCK_DEALS_DATA: Deal[] = [
   {
     id: '1',
     title: 'Seed Bridge Capital — Series A',
@@ -261,6 +275,67 @@ const MOCK_DEALS: Deal[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Mock state machine — mirrors backend DealStateMachine
+// ---------------------------------------------------------------------------
+
+/** A mock transition mirrors the backend's DEAL_TRANSITIONS for simulation. */
+interface MockTransition {
+  action: DealAction;
+  from: DealStatus;
+  to: DealStatus;
+  allowedRoles: string[];
+}
+
+// IMPORTANT: This must mirror the backend DealStateMachine transitions exactly.
+// Adding new transitions here is intentional for demo purposes.
+const MOCK_TRANSITIONS: MockTransition[] = [
+  { action: 'SUBMIT_FOR_ACCEPTANCE', from: 'DRAFT', to: 'PENDING_ACCEPTANCE', allowedRoles: ['BRAND', 'ADMIN'] },
+  { action: 'ACCEPT', from: 'PENDING_ACCEPTANCE', to: 'ACCEPTED', allowedRoles: ['CREATOR'] },
+  { action: 'DECLINE', from: 'PENDING_ACCEPTANCE', to: 'DECLINED', allowedRoles: ['CREATOR'] },
+  { action: 'CANCEL', from: 'DRAFT', to: 'CANCELLED', allowedRoles: ['BRAND', 'ADMIN'] },
+  { action: 'CANCEL', from: 'PENDING_ACCEPTANCE', to: 'CANCELLED', allowedRoles: ['BRAND', 'ADMIN'] },
+  { action: 'FUND', from: 'ACCEPTED', to: 'FUNDED', allowedRoles: ['BRAND', 'ADMIN'] },
+  { action: 'START', from: 'FUNDED', to: 'IN_PROGRESS', allowedRoles: ['BRAND', 'CREATOR', 'ADMIN'] },
+  { action: 'SUBMIT_DELIVERABLE', from: 'IN_PROGRESS', to: 'SUBMITTED', allowedRoles: ['CREATOR'] },
+  { action: 'APPROVE', from: 'SUBMITTED', to: 'APPROVED', allowedRoles: ['BRAND', 'ADMIN'] },
+  { action: 'REQUEST_REVISION', from: 'SUBMITTED', to: 'REVISION_REQUESTED', allowedRoles: ['BRAND', 'ADMIN'] },
+  { action: 'RESUBMIT', from: 'REVISION_REQUESTED', to: 'SUBMITTED', allowedRoles: ['CREATOR'] },
+  { action: 'RAISE_DISPUTE', from: 'SUBMITTED', to: 'DISPUTED', allowedRoles: ['BRAND', 'ADMIN'] },
+  { action: 'RESOLVE', from: 'DISPUTED', to: 'RESOLVED', allowedRoles: ['HRT', 'ADMIN'] },
+  { action: 'ACCEPT_RESOLUTION', from: 'RESOLVED', to: 'APPROVED', allowedRoles: ['BRAND', 'ADMIN'] },
+  { action: 'REQUEST_REWORK', from: 'RESOLVED', to: 'IN_PROGRESS', allowedRoles: ['CREATOR', 'BRAND', 'ADMIN'] },
+  { action: 'RELEASE_PAYMENT', from: 'APPROVED', to: 'COMPLETED', allowedRoles: ['BRAND', 'ADMIN'] },
+  { action: 'RELEASE_PAYMENT', from: 'RESOLVED', to: 'COMPLETED', allowedRoles: ['BRAND', 'ADMIN'] },
+];
+
+const TERMINAL_STATES: DealStatus[] = ['DECLINED', 'COMPLETED', 'CANCELLED'];
+
+function getMockAvailableActions(status: DealStatus, role: string): DealAction[] {
+  if (TERMINAL_STATES.includes(status)) return [];
+  return MOCK_TRANSITIONS
+    .filter((t) => t.from === status && t.allowedRoles.includes(role))
+    .map((t) => t.action);
+}
+
+// ---------------------------------------------------------------------------
+// Mutable mock state store
+// ---------------------------------------------------------------------------
+
+/**
+ * In-memory mock data store that tracks deal state changes.
+ * State changes persist for the session lifetime.
+ * Switching personas with the UserSwitcher updates the "current role" used
+ * for authorization in mock mode.
+ */
+interface MockDealStore {
+  status: DealStatus;
+  events: DealEvent[];
+}
+
+/** Mutable state store keyed by deal id. */
+const mockStore: Record<string, MockDealStore> = {};
+
+// ---------------------------------------------------------------------------
 // Mock helpers
 // ---------------------------------------------------------------------------
 
@@ -292,6 +367,109 @@ function toSummary(deal: Deal): DealSummary {
     updatedAt: deal.updatedAt,
     updatedAtRelative: relativeTime(deal.updatedAt),
   };
+}
+
+/** Get the current user's role from the auth store (mock mode). */
+function getMockUserRole(): string {
+  try {
+    const user = getMockUser();
+    return user?.role ?? 'BRAND';
+  } catch {
+    return 'BRAND';
+  }
+}
+
+/**
+ * Add a new event to the mock store for a deal.
+ * Creates the store entry if it doesn't exist.
+ */
+function addMockEvent(dealId: string, event: Omit<DealEvent, 'id'>): void {
+  if (!mockStore[dealId]) {
+    // Initialize from the original MOCK_DEALS data if not yet initialized
+    const deal = MOCK_DEALS_DATA.find((d) => d.id === dealId);
+    if (deal) {
+      mockStore[dealId] = {
+        status: deal.status,
+        events: [...deal.events],
+      };
+    } else {
+      return;
+    }
+  }
+  mockStore[dealId].events.push({
+    ...event,
+    id: `mock-evt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  });
+  mockStore[dealId].status = event.type === 'state_change'
+    ? (event.label as DealStatus)
+    : mockStore[dealId].status;
+}
+
+/** Get current status from mock store (falls back to initial data). */
+function getMockDealStatus(dealId: string): DealStatus {
+  if (mockStore[dealId]) return mockStore[dealId].status;
+  const deal = MOCK_DEALS_DATA.find((d) => d.id === dealId);
+  return deal?.status ?? 'DRAFT';
+}
+
+/** Get current events from mock store (falls back to initial data). */
+function getMockDealEvents(dealId: string): DealEvent[] {
+  if (mockStore[dealId]) return mockStore[dealId].events;
+  const deal = MOCK_DEALS_DATA.find((d) => d.id === dealId);
+  return deal?.events ?? [];
+}
+
+/**
+ * Apply a state transition in the mock store.
+ * Returns the new status or null if the transition is invalid.
+ */
+function applyMockTransition(dealId: string, action: DealAction): DealStatus | null {
+  if (!mockStore[dealId]) {
+    const deal = MOCK_DEALS_DATA.find((d) => d.id === dealId);
+    if (!deal) return null;
+    mockStore[dealId] = {
+      status: deal.status,
+      events: [...deal.events],
+    };
+  }
+
+  const current = mockStore[dealId].status;
+  const transition = MOCK_TRANSITIONS.find(
+    (t) => t.from === current && t.action === action
+  );
+  if (!transition) return null;
+
+  const role = getMockUserRole();
+  if (!transition.allowedRoles.includes(role)) return null;
+
+  const newStatus = transition.to;
+  mockStore[dealId].status = newStatus;
+
+  const actionLabelMap: Partial<Record<DealAction, string>> = {
+    SUBMIT_FOR_ACCEPTANCE: 'Deal Submitted',
+    ACCEPT: 'Deal Accepted',
+    DECLINE: 'Deal Declined',
+    CANCEL: 'Deal Cancelled',
+    FUND: 'Deal Funded',
+    START: 'Work Started',
+    SUBMIT_DELIVERABLE: 'Deliverable Submitted',
+    APPROVE: 'Deliverable Approved',
+    REQUEST_REVISION: 'Revision Requested',
+    RESUBMIT: 'Deliverable Resubmitted',
+    RAISE_DISPUTE: 'Dispute Raised',
+    RESOLVE: 'Dispute Resolved',
+    ACCEPT_RESOLUTION: 'Resolution Accepted',
+    REQUEST_REWORK: 'Rework Requested',
+    RELEASE_PAYMENT: 'Payment Released',
+  };
+
+  addMockEvent(dealId, {
+    type: 'state_change',
+    label: actionLabelMap[action] ?? action,
+    timestamp: new Date().toISOString(),
+  });
+
+  return newStatus;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +565,12 @@ export const dealApi = {
    */
   async listDeals(options: ListDealsOptions = {}): Promise<DealListResponse> {
     if (USE_MOCK) {
-      let deals = MOCK_DEALS.map(toSummary);
+      // Use the live mock store (reflects state transitions performed in this session).
+      let deals = MOCK_DEALS_DATA.map((d) => ({
+        ...d,
+        status: getMockDealStatus(d.id),
+        updatedAt: mockStore[d.id]?.events.at(-1)?.timestamp ?? d.updatedAt,
+      })).map(toSummary);
       if (options.status) {
         deals = deals.filter((d) => d.status === options.status);
       }
@@ -426,12 +609,14 @@ export const dealApi = {
    */
   async getDeal(id: string): Promise<Deal> {
     if (USE_MOCK) {
-      const deal = MOCK_DEALS.find((d) => d.id === id);
+      const deal = MOCK_DEALS_DATA.find((d) => d.id === id);
       if (!deal) {
         await delay(null, MOCK_LATENCY_MS);
         throw new Error(`Deal "${id}" not found`);
       }
-      return delay(deal);
+      // Return a copy with live status from the mock store
+      const liveStatus = getMockDealStatus(id);
+      return delay({ ...deal, status: liveStatus });
     }
 
     const { data } = await getHttpClient().get<{
@@ -452,19 +637,20 @@ export const dealApi = {
    */
   async getDealState(id: string): Promise<ApiResult<BackendDealState>> {
     if (USE_MOCK) {
-      // Mock: no action permissions in mock mode — return no actions
-      const deal = MOCK_DEALS.find((d) => d.id === id);
+      const deal = MOCK_DEALS_DATA.find((d) => d.id === id);
       if (!deal) {
         return { ok: false, kind: 'not_found', message: `Deal "${id}" not found` };
       }
-      const TERMINAL = ['COMPLETED', 'DECLINED', 'CANCELLED'];
+      const liveStatus = getMockDealStatus(id);
+      const role = getMockUserRole();
+      const availableActions = getMockAvailableActions(liveStatus, role);
       return {
         ok: true,
         data: {
           dealId: id,
-          status: deal.status as DealStatus,
-          isTerminal: TERMINAL.includes(deal.status),
-          availableActions: [],
+          status: liveStatus,
+          isTerminal: TERMINAL_STATES.includes(liveStatus),
+          availableActions,
           brandId: '550e8400-e29b-41d4-a716-446655440001',
           creatorId: null,
         },
@@ -497,12 +683,24 @@ export const dealApi = {
     action: DealAction
   ): Promise<ApiResult<Deal>> {
     if (USE_MOCK) {
-      const deal = MOCK_DEALS.find((d) => d.id === id);
+      const deal = MOCK_DEALS_DATA.find((d) => d.id === id);
       if (!deal) {
-        return { ok: false, kind: 'not_found', message: `Deal "${id}" not found` };
+        return delay({ ok: false, kind: 'not_found' as const, message: `Deal "${id}" not found` });
       }
-      // Mock: no-op — just return the deal as-is
-      return { ok: true, data: deal };
+      // Apply the transition to the mock store — validates state + role
+      const newStatus = applyMockTransition(id, action);
+      if (!newStatus) {
+        return delay({
+          ok: false,
+          kind: 'validation' as const,
+          message: `Action '${action}' is not available from the current state, or you do not have permission.`,
+        });
+      }
+      // Return the updated deal with the new status and live events
+      return delay({
+        ok: true as const,
+        data: { ...deal, status: newStatus, events: getMockDealEvents(id) },
+      });
     }
 
     try {
@@ -536,11 +734,14 @@ export const dealApi = {
     creatorId: string
   ): Promise<ApiResult<Deal>> {
     if (USE_MOCK) {
-      const deal = MOCK_DEALS.find((d) => d.id === dealId);
+      const deal = MOCK_DEALS_DATA.find((d) => d.id === dealId);
       if (!deal) {
         return { ok: false, kind: 'not_found', message: `Deal "${dealId}" not found` };
       }
-      return { ok: true, data: deal };
+      // For mock mode, invite is simulated by moving DRAFT → PENDING_ACCEPTANCE
+      const newStatus = applyMockTransition(dealId, 'SUBMIT_FOR_ACCEPTANCE');
+      const liveStatus = newStatus ?? getMockDealStatus(dealId);
+      return delay({ ok: true, data: { ...deal, status: liveStatus } });
     }
 
     try {
@@ -571,11 +772,11 @@ export const dealApi = {
    */
   async getDealHistory(id: string): Promise<ApiResult<import('../types/deal').DealEvent[]>> {
     if (USE_MOCK) {
-      const deal = MOCK_DEALS.find((d) => d.id === id);
+      const deal = MOCK_DEALS_DATA.find((d) => d.id === id);
       if (!deal) {
         return { ok: false, kind: 'not_found', message: `Deal "${id}" not found` };
       }
-      return { ok: true, data: deal.events };
+      return delay({ ok: true, data: getMockDealEvents(id) });
     }
 
     try {

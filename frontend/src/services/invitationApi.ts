@@ -4,17 +4,26 @@
  * API client for the invitation workflow.
  *
  * Endpoints:
- *   GET /invitations  — list pending invitations for the current creator
+ *   GET  /invitations              — list pending invitations for the current creator
+ *   POST /invitations/:id/accept   — accept an invitation (CREATOR only)
+ *   POST /invitations/:id/decline  — decline an invitation (CREATOR only)
  *
- * This is used alongside dealApi.ts. The invitation flow is a separate
- * resource but shares the same backend base URL and auth token.
+ * The invitation flow is a separate resource but shares the same backend base
+ * URL and auth token with dealApi.
  *
  * Mock data is used when VITE_USE_MOCK_DEALS !== 'false'.
+ *
+ * In mock mode, the mock invitations are tied to the demo deal IDs in
+ * `dealApi.ts`. Each invitation is owned by a specific creator (Alex, Jordan,
+ * Sam) so that switching personas in the persona switcher shows different
+ * invitations — mirroring the backend's `listCreatorInvitations` filter.
  */
 
 import axios, { type AxiosError } from 'axios';
 import type { BackendInvitation } from '../types/api';
+import type { DealStatus } from '../types/dealStates';
 import { getHttpClient } from './httpClient';
+import { getMockUser } from './auth';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -32,15 +41,30 @@ const MOCK_LATENCY_MS = 300;
 
 // ---------------------------------------------------------------------------
 // Mock invitations
+//
+// IDs are aligned with the seed deals in dealApi.ts so that accepting/declining
+// flows through the real state machine in mock mode. The `creatorId` field is
+// what we use to filter invitations per persona in mock mode (mirroring the
+// backend's `listCreatorInvitations`).
 // ---------------------------------------------------------------------------
 
-const MOCK_INVITATIONS: BackendInvitation[] = [
+/**
+ * Mock invitation shape extends BackendInvitation with a private `creatorId`
+ * used to filter for the current user. This field is NOT in the BackendInvitation
+ * wire shape because the backend never returns the creatorId of a deal to a
+ * non-participant; the client only knows it's a participant because it
+ * received the invitation. In mock mode we keep it server-side-equivalent.
+ */
+type MockInvitation = BackendInvitation & { creatorId: string };
+
+const MOCK_INVITATIONS: MockInvitation[] = [
   {
     id: 'inv-1',
-    status: 'PENDING_ACCEPTANCE',
+    status: 'PENDING_ACCEPTANCE' as DealStatus,
     createdAt: '2026-08-28T10:00:00Z',
     updatedAt: '2026-08-28T10:00:00Z',
-    brandId: 'brand-abc',
+    brandId: '550e8400-e29b-41d4-a716-446655440001',
+    creatorId: '550e8400-e29b-41d4-a716-446655440004', // Alex Rivera
     terms: {
       title: 'Brand Studio — Content Collaboration',
       description:
@@ -63,10 +87,11 @@ const MOCK_INVITATIONS: BackendInvitation[] = [
   },
   {
     id: 'inv-2',
-    status: 'PENDING_ACCEPTANCE',
+    status: 'PENDING_ACCEPTANCE' as DealStatus,
     createdAt: '2026-08-25T09:30:00Z',
     updatedAt: '2026-08-25T09:30:00Z',
-    brandId: 'brand-xyz',
+    brandId: '550e8400-e29b-41d4-a716-446655440002',
+    creatorId: '550e8400-e29b-41d4-a716-446655440005', // Jordan Lee
     terms: {
       title: 'TechFlow — Product Launch Video',
       description:
