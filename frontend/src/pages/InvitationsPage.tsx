@@ -6,15 +6,15 @@
  * Lists pending invitations the current creator has been sent.
  * For each invitation, the creator can:
  *   - View the deal terms (brief description + deliverables)
- *   - Accept the invitation (transitions the deal DRAFT → ACCEPTED)
- *   - Decline the invitation (transitions to DECLINED)
+ *   - Accept the invitation  → POST /invitations/:id/accept
+ *   - Decline the invitation → POST /invitations/:id/decline
  *
- * This page reads from `GET /invitations` and uses
- * `useDealActions` for state transitions.
+ * This page reads from `GET /invitations` and uses `invitationApi`
+ * for accept/decline actions. Transitions are handled by the dedicated
+ * invitation endpoints, not by the generic deal transition endpoint.
  *
- * In the mock dataset, the same `dealApi.transitionDeal` is used, with the
- * understanding that in a real backend flow, accept/decline would route
- * through dedicated creator endpoints (out of scope for this slice).
+ * Mock mode (VITE_USE_MOCK_DEALS !== 'false'): actions no-op locally.
+ * Real backend mode: actions call the correct invitation-specific routes.
  */
 
 import { useState, useEffect } from 'react';
@@ -25,10 +25,8 @@ import { Button } from '../components/ui';
 import { DealStateBadge } from '../components/DealStateBadge';
 import { EmptyState, ErrorState } from '../components/DealStateViews';
 import { invitationApi, type InvitationSummary } from '../services/invitationApi';
-import { dealApi } from '../services/dealApi';
 import { useReducedMotion } from '../motion/hooks';
 import { duration, easing } from '../motion/variants';
-import type { DealAction } from '../types/api';
 
 interface Toast {
   id: string;
@@ -159,16 +157,27 @@ export function InvitationsPage() {
     setToasts((prev) => prev.filter((t) => t.id !== toastId));
   };
 
-  const handleAction = async (invitationId: string, action: DealAction) => {
+  const handleAccept = async (invitationId: string) => {
     setActionInFlight(invitationId);
     try {
-      const result = await dealApi.transitionDeal(invitationId, action);
+      const result = await invitationApi.acceptInvitation(invitationId);
       if (result.ok) {
-        addToast(
-          action === 'ACCEPT' ? 'Invitation accepted.' : 'Invitation declined.',
-          'success'
-        );
-        // Refresh the list to remove the now-resolved invitation
+        addToast('Invitation accepted.', 'success');
+        await fetchInvitations();
+      } else {
+        addToast(result.message, result.kind === 'conflict' ? 'conflict' : 'error');
+      }
+    } finally {
+      setActionInFlight(null);
+    }
+  };
+
+  const handleDecline = async (invitationId: string) => {
+    setActionInFlight(invitationId);
+    try {
+      const result = await invitationApi.declineInvitation(invitationId);
+      if (result.ok) {
+        addToast('Invitation declined.', 'success');
         await fetchInvitations();
       } else {
         addToast(result.message, result.kind === 'conflict' ? 'conflict' : 'error');
@@ -255,8 +264,8 @@ export function InvitationsPage() {
                 <StackItem key={inv.id}>
                   <InvitationCard
                     invitation={inv}
-                    onAccept={() => handleAction(inv.id, 'ACCEPT')}
-                    onDecline={() => handleAction(inv.id, 'DECLINE')}
+                    onAccept={() => handleAccept(inv.id)}
+                    onDecline={() => handleDecline(inv.id)}
                     isLoading={actionInFlight === inv.id}
                     disabled={actionInFlight !== null && actionInFlight !== inv.id}
                   />

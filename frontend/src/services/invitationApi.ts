@@ -12,7 +12,7 @@
  * Mock data is used when VITE_USE_MOCK_DEALS !== 'false'.
  */
 
-import axios, { type AxiosInstance } from 'axios';
+import axios, { type AxiosInstance, type AxiosError } from 'axios';
 import type { BackendInvitation } from '../types/api';
 import { getAccessToken } from './auth';
 
@@ -160,6 +160,89 @@ function delay<T>(value: T, ms = MOCK_LATENCY_MS): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
 
+// ---------------------------------------------------------------------------
+// Result types — mirror dealApi for consistent call sites
+// ---------------------------------------------------------------------------
+
+export interface InvitationCallResult<T> {
+  ok: true;
+  data: T;
+}
+
+export interface InvitationCallError {
+  ok: false;
+  kind: 'network' | 'auth' | 'forbidden' | 'validation' | 'conflict' | 'not_found' | 'server';
+  message: string;
+  /** Backend error code, e.g. 'DEAL_001', 'AUTH_011' */
+  code?: string;
+}
+
+export type InvitationResult<T> = InvitationCallResult<T> | InvitationCallError;
+
+function isBackendErrorResponse(
+  data: unknown,
+): data is { success: false; error: { code: string; message: string } } {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'success' in data &&
+    (data as { success: unknown }).success === false
+  );
+}
+
+function mapAxiosError(err: AxiosError<unknown>): InvitationCallError {
+  const status = err.response?.status;
+  const body = err.response?.data;
+
+  if (status === 401) {
+    return {
+      ok: false,
+      kind: 'auth',
+      message: 'Authentication required. Please sign in.',
+    };
+  }
+  if (status === 403) {
+    const code = isBackendErrorResponse(body) ? body.error.code : undefined;
+    return {
+      ok: false,
+      kind: 'forbidden',
+      message: 'You do not have permission to perform this action.',
+      code,
+    };
+  }
+  if (status === 404) {
+    return { ok: false, kind: 'not_found', message: 'Invitation not found.' };
+  }
+  if (status === 409) {
+    return {
+      ok: false,
+      kind: 'conflict',
+      message:
+        'This invitation was already responded to. Please reload and try again.',
+      code: isBackendErrorResponse(body) ? body.error.code : undefined,
+    };
+  }
+  if (status === 400) {
+    const message = isBackendErrorResponse(body)
+      ? body.error.message
+      : err.message;
+    const code = isBackendErrorResponse(body) ? body.error.code : undefined;
+    return { ok: false, kind: 'validation', message, code };
+  }
+  if (status && status >= 500) {
+    return {
+      ok: false,
+      kind: 'server',
+      message: 'A server error occurred. Please try again later.',
+    };
+  }
+  return {
+    ok: false,
+    kind: 'network',
+    message: 'Network error. Please check your connection.',
+  };
+}
+
 export const invitationApi = {
   /**
    * Whether the client is currently serving mock data.
@@ -182,6 +265,68 @@ export const invitationApi = {
     }>('/invitations', { headers: authHeaders() });
 
     return data.data.invitations.map(normalizeInvitation);
+  },
+
+  /**
+   * Accept a pending invitation.
+   *
+   * Real backend: POST /invitations/:id/accept
+   * Mock mode: no-ops with a small latency to keep UI honest.
+   */
+  async acceptInvitation(id: string): Promise<InvitationResult<void>> {
+    if (USE_MOCK) {
+      await delay(undefined);
+      return { ok: true, data: undefined };
+    }
+
+    try {
+      await getHttpClient().post(
+        `/invitations/${encodeURIComponent(id)}/accept`,
+        {},
+        { headers: authHeaders() },
+      );
+      return { ok: true, data: undefined };
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        return mapAxiosError(err);
+      }
+      return {
+        ok: false,
+        kind: 'server',
+        message: 'Unexpected error accepting invitation.',
+      };
+    }
+  },
+
+  /**
+   * Decline a pending invitation (terminal).
+   *
+   * Real backend: POST /invitations/:id/decline
+   * Mock mode: no-ops with a small latency.
+   */
+  async declineInvitation(id: string): Promise<InvitationResult<void>> {
+    if (USE_MOCK) {
+      await delay(undefined);
+      return { ok: true, data: undefined };
+    }
+
+    try {
+      await getHttpClient().post(
+        `/invitations/${encodeURIComponent(id)}/decline`,
+        {},
+        { headers: authHeaders() },
+      );
+      return { ok: true, data: undefined };
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        return mapAxiosError(err);
+      }
+      return {
+        ok: false,
+        kind: 'server',
+        message: 'Unexpected error declining invitation.',
+      };
+    }
   },
 };
 
