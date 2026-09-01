@@ -24,6 +24,7 @@ import type { BackendInvitation } from '../types/api';
 import type { DealStatus } from '../types/dealStates';
 import { getHttpClient } from './httpClient';
 import { getMockUser } from './auth';
+import type { MockUser } from './auth';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -113,7 +114,65 @@ const MOCK_INVITATIONS: MockInvitation[] = [
     },
     latestVersionNumber: 1,
   },
+  {
+    id: 'inv-3',
+    status: 'PENDING_ACCEPTANCE' as DealStatus,
+    createdAt: '2026-08-30T14:15:00Z',
+    updatedAt: '2026-08-30T14:15:00Z',
+    brandId: '550e8400-e29b-41d4-a716-446655440003',
+    creatorId: '550e8400-e29b-41d4-a716-446655440006', // Sam Patel
+    terms: {
+      title: 'Cloud9 — UI Animation Series',
+      description:
+        'Design and animate 6 short product UI showcase loops for our ' +
+        'marketing site and pitch decks. Cinematic micro-interactions preferred.',
+      deliverables: [
+        {
+          title: 'Hero Animation Loop',
+          description: '8s seamless loop, 4K, web + social optimized',
+          deadline: '2026-10-01',
+        },
+        {
+          title: 'Feature Spotlight Pack',
+          description: '5 x 4s loops, each highlighting a product feature',
+        },
+      ],
+      paymentAmount: 320000,
+      currency: 'USD',
+    },
+    latestVersionNumber: 1,
+  },
 ];
+
+// ---------------------------------------------------------------------------
+// Mutable mock invitation store — tracks accept/decline state for the
+// session so the invitations list updates immediately after each action.
+// Mirrors the backend's behavior of filtering out non-pending invitations.
+// ---------------------------------------------------------------------------
+
+/**
+ * Status of an invitation in the mock store. After accept, the deal status
+ * moves to ACCEPTED; after decline, it moves to DECLINED. Either way, the
+ * invitation should disappear from the pending inbox.
+ */
+type MockInvitationStatus = 'PENDING_ACCEPTANCE' | 'ACCEPTED' | 'DECLINED';
+
+const invitationStatusStore: Record<string, MockInvitationStatus> = {};
+
+/** Read the current invitation status (falls back to seed data). */
+function getMockInvitationStatus(id: string): MockInvitationStatus {
+  if (invitationStatusStore[id]) return invitationStatusStore[id];
+  const inv = MOCK_INVITATIONS.find((i) => i.id === id);
+  return (inv?.status as MockInvitationStatus) ?? 'PENDING_ACCEPTANCE';
+}
+
+/** Set the mock invitation status (used by accept/decline). */
+function setMockInvitationStatus(
+  id: string,
+  status: MockInvitationStatus
+): void {
+  invitationStatusStore[id] = status;
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -257,10 +316,23 @@ export const invitationApi = {
 
   /**
    * List pending invitations for the current creator.
+   *
+   * Mock mode: filters by the current mock user's ID so each persona
+   * sees only their own invitations. Non-creators get an empty list.
+   * The filter mirrors the backend's `listCreatorInvitations` behavior.
    */
   async listInvitations(): Promise<InvitationSummary[]> {
     if (USE_MOCK) {
-      return delay(MOCK_INVITATIONS.map(normalizeInvitation));
+      const user = getMockUser() as MockUser | null;
+      const creatorId = user?.role === 'CREATOR' ? user.id : null;
+      // Use live status from the store (reflects accept/decline in this session)
+      const pending = MOCK_INVITATIONS.filter((inv) => {
+        const liveStatus = getMockInvitationStatus(inv.id);
+        const isPending = liveStatus === 'PENDING_ACCEPTANCE';
+        const isMine = creatorId == null || inv.creatorId === creatorId;
+        return isPending && isMine;
+      });
+      return delay(pending.map(normalizeInvitation));
     }
 
     const { data } = await getHttpClient().get<{
@@ -275,10 +347,36 @@ export const invitationApi = {
    * Accept a pending invitation.
    *
    * Real backend: POST /invitations/:id/accept
-   * Mock mode: no-ops with a small latency to keep UI honest.
+   * Mock mode: records the action in the local invitation store so the
+   * invitation disappears from the pending inbox. Also performs the
+   * corresponding deal-state transition (PENDING_ACCEPTANCE → ACCEPTED)
+   * through the dealApi mock store, so deal detail/history are consistent
+   * if the invitation id maps to a seeded deal id.
    */
   async acceptInvitation(id: string): Promise<InvitationResult<void>> {
     if (USE_MOCK) {
+      // Reject if already responded to (mirrors backend state machine).
+      const current = getMockInvitationStatus(id);
+      if (current !== 'PENDING_ACCEPTANCE') {
+        await delay(undefined);
+        return {
+          ok: false,
+          kind: 'conflict',
+          message: 'This invitation was already responded to.',
+        };
+      }
+      // Mark invitation as accepted so the inbox updates immediately.
+      setMockInvitationStatus(id, 'ACCEPTED');
+      // Best-effort: sync the underlying deal state machine if the
+      // invitation id maps to a seeded deal id (inv-N → deal-N). The
+      // invitation has its own id space, but when they collide we keep
+      // both stores consistent so the demo flow makes sense.
+      try {
+        const { dealApi } = await import('./dealApi');
+        await dealApi.transitionDeal(id, 'ACCEPT');
+      } catch {
+        // Silently ignore — invitation may not correspond to a deal.
+      }
       await delay(undefined);
       return { ok: true, data: undefined };
     }
@@ -305,10 +403,29 @@ export const invitationApi = {
    * Decline a pending invitation (terminal).
    *
    * Real backend: POST /invitations/:id/decline
-   * Mock mode: no-ops with a small latency.
+   * Mock mode: records the action in the local invitation store so the
+   * invitation disappears from the pending inbox. Also performs the
+   * corresponding deal-state transition (PENDING_ACCEPTANCE → DECLINED)
+   * through the dealApi mock store when applicable.
    */
   async declineInvitation(id: string): Promise<InvitationResult<void>> {
     if (USE_MOCK) {
+      const current = getMockInvitationStatus(id);
+      if (current !== 'PENDING_ACCEPTANCE') {
+        await delay(undefined);
+        return {
+          ok: false,
+          kind: 'conflict',
+          message: 'This invitation was already responded to.',
+        };
+      }
+      setMockInvitationStatus(id, 'DECLINED');
+      try {
+        const { dealApi } = await import('./dealApi');
+        await dealApi.transitionDeal(id, 'DECLINE');
+      } catch {
+        // Silently ignore — invitation may not correspond to a deal.
+      }
       await delay(undefined);
       return { ok: true, data: undefined };
     }

@@ -400,9 +400,9 @@ function addMockEvent(dealId: string, event: Omit<DealEvent, 'id'>): void {
     ...event,
     id: `mock-evt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   });
-  mockStore[dealId].status = event.type === 'state_change'
-    ? (event.label as DealStatus)
-    : mockStore[dealId].status;
+  // NOTE: do not overwrite `status` here. `applyMockTransition` is the
+  // single source of truth for status updates. The event label is a
+  // human-readable string (e.g. "Deal Accepted"), not a DealStatus code.
 }
 
 /** Get current status from mock store (falls back to initial data). */
