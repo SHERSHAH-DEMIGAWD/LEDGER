@@ -7,6 +7,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
 import dealRoutes from './routes/deal.routes.js';
+import invitationRoutes from './routes/invitation.routes.js';
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.get('/health', (_req, res) => {
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
 app.use('/deals', dealRoutes);
+app.use('/invitations', invitationRoutes);
 
 // Error handling
 app.use(notFoundHandler);
