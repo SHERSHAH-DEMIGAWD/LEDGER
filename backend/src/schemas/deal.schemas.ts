@@ -96,6 +96,52 @@ export const listDealsQuerySchema = z.object({
 });
 
 // ---------------------------------------------------------------------------------------
+// Submit Deliverable
+// ---------------------------------------------------------------------------------------
+
+export const submitDeliverableSchema = z.object({
+  note: z
+    .string()
+    .max(5000, 'Submission note cannot exceed 5000 characters')
+    .optional(),
+});
+
+export type SubmitDeliverableInput = z.infer<typeof submitDeliverableSchema>;
+
+// ---------------------------------------------------------------------------------------
+// Request Revision
+// ---------------------------------------------------------------------------------------
+
+export const requestRevisionSchema = z.object({
+  note: z
+    .string()
+    .min(1, 'Revision note is required')
+    .max(5000, 'Revision note cannot exceed 5000 characters'),
+});
+
+export type RequestRevisionInput = z.infer<typeof requestRevisionSchema>;
+
+// ---------------------------------------------------------------------------------------
+// Approve Deliverable
+// ---------------------------------------------------------------------------------------
+
+// Approval requires no additional payload — the brand's auth and the
+// current SUBMITTED state are sufficient authorization.
+export const approveDeliverableSchema = z.object({});
+
+export type ApproveDeliverableInput = z.infer<typeof approveDeliverableSchema>;
+
+// ---------------------------------------------------------------------------------------
+// Release Payment (Complete)
+// ---------------------------------------------------------------------------------------
+
+// Payment release requires no additional payload — the brand's auth and
+// current APPROVED state are sufficient authorization.
+export const releasePaymentSchema = z.object({});
+
+export type ReleasePaymentInput = z.infer<typeof releasePaymentSchema>;
+
+// ---------------------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------------------
 

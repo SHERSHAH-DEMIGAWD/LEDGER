@@ -128,8 +128,8 @@ export const DEAL_TRANSITIONS: readonly DealTransition[] = [
     action: 'RESUBMIT',
     from: 'REVISION_REQUESTED',
     to: 'SUBMITTED',
-    allowedRoles: ['CREATOR'],
-    description: 'Creator resubmits revised deliverable',
+    allowedRoles: ['CREATOR', 'ADMIN'],
+    description: 'Creator resubmits revised deliverable after revision request',
   },
   {
     action: 'RAISE_DISPUTE',

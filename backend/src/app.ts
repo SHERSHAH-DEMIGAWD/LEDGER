@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.routes.js';
 import userRoutes from './routes/user.routes.js';
 import dealRoutes from './routes/deal.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
+import submissionRoutes from './routes/submission.routes.js';
 import invitationRoutes from './routes/invitation.routes.js';
 
 const app = express();
@@ -62,6 +63,7 @@ app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
 app.use('/deals', dealRoutes);
 app.use('/deals', paymentRoutes);
+app.use('/deals', submissionRoutes);
 app.use('/invitations', invitationRoutes);
 
 // Error handling
