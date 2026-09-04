@@ -19,6 +19,12 @@ export interface DealWithVersions {
   // paymentRecordId is the FK to the Payment record. Set after successful funding.
   // Used by PaymentService for reconciliation and by getPaymentStatus.
   paymentRecordId: string | null;
+  // latestRevisionNote mirrors the most recent revision/resolution note
+  // independently of the audit log. Set on request-revision and on
+  // dispute resolution. The audit log remains the authoritative history.
+  latestRevisionNote: string | null;
+  latestRevisionNoteAuthorId: string | null;
+  latestRevisionNoteAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   versions: Array<{
@@ -204,6 +210,70 @@ export class DealRepository {
       if (result.count === 0) {
         // Either the deal was deleted, or another transition already moved it.
         // Either way, the caller's view of state is stale.
+        const { DealVersionConflictError } = await import('../domain/errors/index.js');
+        throw new DealVersionConflictError(
+          'Deal was modified by another request. Please reload and retry.',
+        );
+      }
+
+      const deal = await tx.deal.findUnique({
+        where: { id: dealId },
+        include: {
+          versions: {
+            orderBy: { versionNumber: 'asc' },
+          },
+        },
+      });
+
+      if (!deal) {
+        throw new NotFoundError('Deal', dealId);
+      }
+
+      return this.mapToDealWithVersions(deal);
+    });
+  }
+
+  /**
+   * Update the status of a Deal atomically with optimistic locking and
+   * persist the latest revision/resolution note.
+   *
+   * Used by DisputeService.resolveDispute to atomically update both the
+   * deal status and the revision note in a single transaction.
+   *
+   * The note is set independently of the audit log: the audit trail
+   * remains the authoritative history; this column is a mirror of the
+   * most-recent note for direct retrieval.
+   */
+  async updateStatusAndRevisionNote(
+    dealId: string,
+    newStatus: DealStatus,
+    expectedUpdatedAt: Date,
+    requesterId: string,
+    requesterRole: string,
+    revisionNote: string,
+  ): Promise<DealWithVersions> {
+    const existingDeal = await this.findByIdWithAccessCheck(dealId, requesterId, requesterRole);
+    const expected =
+      expectedUpdatedAt instanceof Date
+        ? expectedUpdatedAt
+        : existingDeal.updatedAt;
+
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.deal.updateMany({
+        where: {
+          id: dealId,
+          updatedAt: expected,
+        },
+        data: {
+          status: newStatus,
+          latestRevisionNote: revisionNote,
+          latestRevisionNoteAuthorId: requesterId,
+          latestRevisionNoteAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      if (result.count === 0) {
         const { DealVersionConflictError } = await import('../domain/errors/index.js');
         throw new DealVersionConflictError(
           'Deal was modified by another request. Please reload and retry.',
@@ -657,6 +727,9 @@ export class DealRepository {
       contractId: deal.contractId,
       fundingStatus: deal.fundingStatus as FundingStatus,
       paymentRecordId: deal.paymentRecordId,
+      latestRevisionNote: deal.latestRevisionNote,
+      latestRevisionNoteAuthorId: deal.latestRevisionNoteAuthorId,
+      latestRevisionNoteAt: deal.latestRevisionNoteAt,
       createdAt: deal.createdAt,
       updatedAt: deal.updatedAt,
       versions: deal.versions.map((v) => ({

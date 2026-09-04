@@ -202,14 +202,15 @@ export class SubmissionService {
       { isDealParticipant: { brandId: deal.brandId, creatorId: deal.creatorId } },
     );
 
-    // 5. Persist the state change to REVISION_REQUESTED
+    // 5. Persist the state change to REVISION_REQUESTED, recording the revision note
     const previousUpdatedAt = deal.updatedAt;
-    await dealRepository.updateStatus(
+    await dealRepository.updateStatusAndRevisionNote(
       dealId,
       targetStatus,
       previousUpdatedAt,
       actor.id,
       actor.role,
+      note,
     );
 
     // 6. Create audit event for revision request

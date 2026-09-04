@@ -162,6 +162,38 @@ export const acceptProposalSchema = z.object({});
 
 export const rejectProposalSchema = z.object({});
 
+// ---------------------------------------------------------------------------
+// Dispute Routes
+// ---------------------------------------------------------------------------
+
+export const raiseDisputeSchema = z.object({
+  note: z
+    .string()
+    .min(1, 'Dispute note is required')
+    .max(5000, 'Dispute note cannot exceed 5000 characters'),
+});
+
+export type RaiseDisputeInput = z.infer<typeof raiseDisputeSchema>;
+
+export const resolveDisputeSchema = z.object({
+  note: z
+    .string()
+    .min(1, 'Resolution note is required')
+    .max(5000, 'Resolution note cannot exceed 5000 characters'),
+});
+
+export type ResolveDisputeInput = z.infer<typeof resolveDisputeSchema>;
+
+// ---------------------------------------------------------------------------
+// Resubmit Route
+// ---------------------------------------------------------------------------
+
+// Resubmit requires no additional payload — the creator's auth and the
+// current REVISION_REQUESTED state are sufficient authorization.
+export const resubmitSchema = z.object({});
+
+export type ResubmitInput = z.infer<typeof resubmitSchema>;
+
 export type ProposeTermsInput = z.infer<typeof proposeTermsSchema>;
 export type AcceptProposalInput = z.infer<typeof acceptProposalSchema>;
 export type RejectProposalInput = z.infer<typeof rejectProposalSchema>;

@@ -27,11 +27,13 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { mockAwareAuth } from '../middleware/mockAuth.js';
 import { validate } from '../middleware/validate.js';
 import { submissionService } from '../services/SubmissionService.js';
+import { transitionDeal } from '../services/DealService.js';
 import {
   submitDeliverableSchema,
   requestRevisionSchema,
   approveDeliverableSchema,
   releasePaymentSchema,
+  resubmitSchema,
 } from '../schemas/deal.schemas.js';
 
 const router = Router();
@@ -180,6 +182,52 @@ router.post(
       });
 
       res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * POST /deals/:id/resubmit
+ *
+ * Resubmit a revised deliverable after a revision request (Creator only).
+ *
+ * Body: (no payload required)
+ *
+ * Authorization:
+ * - Creator participant associated with the deal → allowed
+ * - Admin → allowed
+ * - Brand → NOT allowed (403)
+ * - HRT → NOT allowed (403)
+ * - Unrelated users → NOT allowed (403)
+ *
+ * State requirements:
+ * - Deal must be in REVISION_REQUESTED status
+ *
+ * This is a thin wrapper around the existing state-machine transition
+ * (RESUBMIT) and reuses the same transition logic as the generic
+ * /deals/:id/transition endpoint. It exists as a dedicated route so
+ * clients don't need to know the internal action name, and so it can be
+ * authorized at the route level in addition to the state-machine level.
+ *
+ * Returns 200 with the new deal.
+ */
+router.post(
+  '/:id/resubmit',
+  mockAwareAuth,
+  validate(resubmitSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      // Reuse the existing state-machine/service transition logic.
+      // No transition logic is duplicated here.
+      const deal = await transitionDeal(id, 'RESUBMIT', {
+        id: req.user!.id,
+        role: req.user!.role as 'BRAND' | 'CREATOR' | 'HRT' | 'ADMIN',
+      });
+
+      res.json({ success: true, data: { deal } });
     } catch (error) {
       next(error);
     }

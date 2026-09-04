@@ -263,6 +263,7 @@ export function validateTransition(
   // on any deal; HRT may act on disputes regardless of participation.
   if (
     actor.role !== 'ADMIN' &&
+    actor.role !== 'HRT' &&
     options.isDealParticipant !== undefined
   ) {
     const isParticipant =

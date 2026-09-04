@@ -20,11 +20,13 @@ import type { DealWithVersions } from '../../src/repositories/DealRepository.js'
 
 const mockCreateAuditLog = vi.fn();
 const mockUpdateStatus = vi.fn();
+const mockUpdateStatusAndRevisionNote = vi.fn();
 
 vi.mock('../../src/repositories/DealRepository.js', () => ({
   dealRepository: {
     findById: vi.fn(),
     updateStatus: (...args: unknown[]) => mockUpdateStatus(...args),
+    updateStatusAndRevisionNote: (...args: unknown[]) => mockUpdateStatusAndRevisionNote(...args),
     createAuditLog: (...args: unknown[]) => mockCreateAuditLog(...args),
   },
 }));
@@ -44,6 +46,9 @@ const makeInProgressDeal = (overrides: Partial<DealWithVersions> = {}): DealWith
   fundingStatus: 'FUNDED',
   contractId: null,
   paymentRecordId: null,
+  latestRevisionNote: null,
+  latestRevisionNoteAuthorId: null,
+  latestRevisionNoteAt: null,
   acceptedVersionNumber: 1,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -59,6 +64,9 @@ const makeSubmittedDeal = (overrides: Partial<DealWithVersions> = {}): DealWithV
   fundingStatus: 'FUNDED',
   contractId: null,
   paymentRecordId: null,
+  latestRevisionNote: null,
+  latestRevisionNoteAuthorId: null,
+  latestRevisionNoteAt: null,
   acceptedVersionNumber: 1,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -74,6 +82,9 @@ const makeApprovedDeal = (overrides: Partial<DealWithVersions> = {}): DealWithVe
   fundingStatus: 'FUNDED',
   contractId: null,
   paymentRecordId: null,
+  latestRevisionNote: null,
+  latestRevisionNoteAuthorId: null,
+  latestRevisionNoteAt: null,
   acceptedVersionNumber: 1,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -253,7 +264,7 @@ describe('SubmissionService — requestRevision', () => {
     it('allows brand to request revision on their own deal', async () => {
       const deal = makeSubmittedDeal();
       vi.mocked(dealRepository.findById).mockResolvedValue(deal);
-      mockUpdateStatus.mockResolvedValue({ ...deal, status: 'REVISION_REQUESTED' });
+      mockUpdateStatusAndRevisionNote.mockResolvedValue({ ...deal, status: 'REVISION_REQUESTED' });
 
       const result = await service.requestRevision('deal-1', 'Fix the logo', brandActor);
 
@@ -263,7 +274,7 @@ describe('SubmissionService — requestRevision', () => {
     it('allows admin to request revision on any deal', async () => {
       const deal = makeSubmittedDeal();
       vi.mocked(dealRepository.findById).mockResolvedValue(deal);
-      mockUpdateStatus.mockResolvedValue({ ...deal, status: 'IN_PROGRESS' });
+      mockUpdateStatusAndRevisionNote.mockResolvedValue({ ...deal, status: 'IN_PROGRESS' });
 
       const result = await service.requestRevision('deal-1', 'Fix it', adminActor);
 
@@ -313,7 +324,7 @@ describe('SubmissionService — requestRevision', () => {
     it('creates DELIVERABLE.REVISION_REQUESTED audit event with revision note', async () => {
       const deal = makeSubmittedDeal();
       vi.mocked(dealRepository.findById).mockResolvedValue(deal);
-      mockUpdateStatus.mockResolvedValue({ ...deal, status: 'REVISION_REQUESTED' });
+      mockUpdateStatusAndRevisionNote.mockResolvedValue({ ...deal, status: 'REVISION_REQUESTED' });
 
       await service.requestRevision('deal-1', 'Please revise the opening', brandActor);
 
@@ -337,7 +348,7 @@ describe('SubmissionService — requestRevision', () => {
     it('returns dealId, REVISION_REQUESTED status, and timestamp', async () => {
       const deal = makeSubmittedDeal();
       vi.mocked(dealRepository.findById).mockResolvedValue(deal);
-      mockUpdateStatus.mockResolvedValue({ ...deal, status: 'REVISION_REQUESTED' });
+      mockUpdateStatusAndRevisionNote.mockResolvedValue({ ...deal, status: 'REVISION_REQUESTED' });
 
       const result = await service.requestRevision('deal-1', 'Fix it', brandActor);
 
@@ -597,7 +608,7 @@ describe('SubmissionService — Revision loop', () => {
 
     // SUBMITTED → REVISION_REQUESTED (revision requested)
     vi.mocked(dealRepository.findById).mockResolvedValue({ ...inProgressDeal, status: 'SUBMITTED' });
-    mockUpdateStatus.mockResolvedValue({ ...inProgressDeal, status: 'REVISION_REQUESTED' });
+    mockUpdateStatusAndRevisionNote.mockResolvedValue({ ...inProgressDeal, status: 'REVISION_REQUESTED' });
 
     const revisionResult = await service.requestRevision('deal-1', 'Please fix the colors', brandActor);
     expect(revisionResult.status).toBe('REVISION_REQUESTED');
@@ -625,7 +636,7 @@ describe('SubmissionService — Revision loop', () => {
   it('revision request creates audit log with revision note', async () => {
     const deal = makeSubmittedDeal();
     vi.mocked(dealRepository.findById).mockResolvedValue(deal);
-    mockUpdateStatus.mockResolvedValue({ ...deal, status: 'REVISION_REQUESTED' });
+    mockUpdateStatusAndRevisionNote.mockResolvedValue({ ...deal, status: 'REVISION_REQUESTED' });
 
     await service.requestRevision('deal-1', 'The logo needs to be bigger', brandActor);
 

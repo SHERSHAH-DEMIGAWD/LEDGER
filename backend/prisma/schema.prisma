@@ -96,6 +96,13 @@ model Deal {
   // (The canonical relation is Payment.dealId → Deal.id, with the unique
   //  constraint on Payment.dealId enforcing the one-to-one.)
   paymentRecordId       String?
+  // latestRevisionNote persists the most recent revision / dispute resolution
+  // note on the deal so it can be retrieved independently of the audit log.
+  // The audit log remains the authoritative history; this column is a mirror
+  // of the most-recent note for direct retrieval.
+  latestRevisionNote           String?
+  latestRevisionNoteAuthorId   String?
+  latestRevisionNoteAt         DateTime?
   versions              DealVersion[]
   auditLogs             AuditLog[]
   createdAt             DateTime      @default(now())

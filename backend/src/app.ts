@@ -10,6 +10,7 @@ import userRoutes from './routes/user.routes.js';
 import dealRoutes from './routes/deal.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import submissionRoutes from './routes/submission.routes.js';
+import disputeRoutes from './routes/dispute.routes.js';
 import invitationRoutes from './routes/invitation.routes.js';
 import termsRoutes from './routes/terms.routes.js';
 
@@ -65,6 +66,7 @@ app.use('/users', userRoutes);
 app.use('/deals', dealRoutes);
 app.use('/deals', paymentRoutes);
 app.use('/deals', submissionRoutes);
+app.use('/deals', disputeRoutes);
 app.use('/invitations', invitationRoutes);
 app.use('/deals', termsRoutes);
 
