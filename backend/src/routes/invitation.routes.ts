@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { mockAwareAuth } from '../middleware/mockAuth.js';
-import { listCreatorInvitations, transitionDeal, getDeal } from '../services/DealService.js';
+import { listCreatorInvitations, transitionDeal } from '../services/DealService.js';
 import { dealRepository } from '../repositories/DealRepository.js';
 import type { DealAction } from '../domain/state-machine/DealStateMachine.js';
 
