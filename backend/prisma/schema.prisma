@@ -78,19 +78,23 @@ model EmailVerification {
 // ============================================================
 
 model Deal {
-  id              String        @id @default(uuid())
-  brandId         String
-  brand           User          @relation("BrandDeals", fields: [brandId], references: [id])
-  creatorId       String?
-  creator         User?         @relation("CreatorDeals", fields: [creatorId], references: [id])
-  status          DealStatus    @default(DRAFT)
+  id                    String        @id @default(uuid())
+  brandId               String
+  brand                 User          @relation("BrandDeals", fields: [brandId], references: [id])
+  creatorId             String?
+  creator               User?         @relation("CreatorDeals", fields: [creatorId], references: [id])
+  status                DealStatus    @default(DRAFT)
+  // acceptedVersionNumber tracks which DealVersion is currently authoritative.
+  // Initially set to 1 when a deal is created. Updated when term proposals are accepted.
+  // A value of null means no version has been explicitly accepted (legacy state).
+  acceptedVersionNumber Int?
   // NOTE: Deal terms are NOT stored here. DealVersion is the authoritative source for versioned terms.
-  contractId      String?
-  fundingStatus   FundingStatus @default(NOT_FUNDED)
-  versions        DealVersion[]
-  auditLogs       AuditLog[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  contractId            String?
+  fundingStatus         FundingStatus @default(NOT_FUNDED)
+  versions              DealVersion[]
+  auditLogs             AuditLog[]
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   @@index([brandId])
   @@index([creatorId])
@@ -99,12 +103,17 @@ model Deal {
 }
 
 model DealVersion {
-  id           String   @id @default(uuid())
-  dealId       String
-  deal         Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  id            String   @id @default(uuid())
+  dealId        String
+  deal          Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
   versionNumber Int
-  terms        Json
-  createdAt    DateTime @default(now())
+  // isPending indicates this version is a proposed change awaiting counterparty acceptance.
+  // A version with isPending=true must NOT be used for payments or as authoritative terms.
+  // Once accepted, isPending is set to false (or the acceptedVersionNumber points to it).
+  // A version with isPending=true that is rejected never becomes authoritative.
+  isPending     Boolean  @default(false)
+  terms         Json
+  createdAt     DateTime @default(now())
 
   @@unique([dealId, versionNumber])
   @@index([dealId])

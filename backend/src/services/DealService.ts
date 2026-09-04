@@ -13,6 +13,7 @@
 
 import {
   validateTransition,
+  validateTermRefinement,
   listAvailableActions,
   isTerminal,
   type DealStatus,
@@ -403,4 +404,332 @@ export async function getDealHistory(
     resourceType: log.resourceType,
     resourceId: log.resourceId,
   }));
+}
+
+// =============================================================================
+// Term Refinement (Deal Terms MVP)
+// =============================================================================
+
+/**
+ * Term-refinement service output: a structured view of the current term state.
+ *
+ * - authoritativeVersionNumber: the version that is currently authoritative
+ *   (the active commercial terms). This is what PaymentService and any other
+ *   code reading financial terms MUST use.
+ * - pendingVersionNumber: the version number of an outstanding proposal
+ *   awaiting counterparty acceptance, or null if none.
+ * - authoritativeTerms: the terms of the authoritative version (typed payload).
+ * - pendingTerms: the terms of the pending proposal, or null if none.
+ *
+ * NOTE: This intentionally does NOT return all historical versions. The deal
+ * endpoint (`getDeal`) already returns the full version history for audit/review
+ * purposes; the term-refinement surface is focused on the "what's active now"
+ * and "what's awaiting acceptance" questions.
+ */
+export interface DealTermsView {
+  dealId: string;
+  dealStatus: DealStatus;
+  authoritativeVersionNumber: number;
+  pendingVersionNumber: number | null;
+  authoritativeTerms: DealTerms;
+  pendingTerms: DealTerms | null;
+  pendingProposedBy: 'BRAND' | null;
+  pendingProposedAt: Date | null;
+}
+
+/**
+ * Resolve the authoritative and pending versions for a deal, returning a
+ * structured view that is safe to surface to API consumers.
+ *
+ * Resolution rules (mirrors DealRepository.getAuthoritativeVersion):
+ *  - authoritativeVersionNumber = deal.acceptedVersionNumber (the active vN)
+ *    OR (legacy fallback) the latest non-pending version.
+ *  - pendingVersionNumber = the unique pending version, or null.
+ *
+ * Throws NotFoundError if deal does not exist; UnauthorizedAccessError if the
+ * requester is not a participant (or ADMIN/HRT).
+ */
+export async function getDealTerms(
+  dealId: string,
+  requesterId: string,
+  requesterRole: string,
+): Promise<DealTermsView> {
+  const deal = await dealRepository.findByIdWithAccessCheck(
+    dealId,
+    requesterId,
+    requesterRole,
+  );
+
+  const authoritative = await dealRepository.getAuthoritativeVersion(
+    dealId,
+    deal.acceptedVersionNumber,
+  );
+  if (!authoritative) {
+    // Should not happen for any deal that exists (v1 is always created accepted).
+    throw new InvalidStateError(
+      `Deal '${dealId}' has no authoritative terms version`,
+    );
+  }
+
+  const pending = await dealRepository.getPendingVersion(dealId);
+
+  return {
+    dealId,
+    dealStatus: deal.status,
+    authoritativeVersionNumber: authoritative.versionNumber,
+    pendingVersionNumber: pending?.versionNumber ?? null,
+    authoritativeTerms: authoritative.terms as unknown as DealTerms,
+    pendingTerms: pending ? (pending.terms as unknown as DealTerms) : null,
+    pendingProposedBy: pending ? 'BRAND' : null, // MVP: only brand can propose
+    pendingProposedAt: pending ? pending.createdAt : null,
+  };
+}
+
+/**
+ * Brand proposes a new term set for an existing deal.
+ *
+ * The proposal is recorded as a NEW DealVersion with isPending=true. The
+ * authoritative version is NOT mutated. The proposal requires explicit
+ * counterparty acceptance (acceptProposal) before it becomes authoritative.
+ *
+ * Authorization & lifecycle:
+ *  - State-machine-gated through validateTermRefinement('PROPOSE_TERMS').
+ *  - Only BRAND participants of an ACCEPTED, FUNDED, or IN_PROGRESS deal.
+ *  - Term validation reuses existing validateDealTerms — arbitrary JSON is
+ *    rejected with DealTermsValidationError.
+ *
+ * Concurrency:
+ *  - Optimistic lock on deal.updatedAt.
+ *  - If another proposal is already pending, returns 400 (cannot stack pending).
+ *
+ * Audit:
+ *  - Records DEAL.TERMS_PROPOSED with the previous authoritative version and
+ *    the proposed version number.
+ */
+export async function proposeTerms(
+  dealId: string,
+  terms: unknown,
+  actor: TransitionActor,
+): Promise<DealTermsView> {
+  // Domain-level validation (rejects arbitrary JSON, malformed terms, etc.)
+  validateDealTerms(terms);
+
+  // 1. Load deal (no access check yet — state machine enforces participation).
+  const deal = await dealRepository.findById(dealId);
+  if (!deal) {
+    throw new InvalidStateError(`Deal '${dealId}' not found`);
+  }
+
+  // 2. State-machine authorization gate (lifecycle + role + participant).
+  validateTermRefinement(deal.status, 'PROPOSE_TERMS', actor, {
+    isDealParticipant: { brandId: deal.brandId, creatorId: deal.creatorId },
+  });
+
+  // 3. Reject if a proposal is already pending (single-pending design).
+  const existingPending = await dealRepository.getPendingVersion(dealId);
+  if (existingPending) {
+    throw new InvalidStateError(
+      `Deal '${dealId}' already has a pending term proposal (v${existingPending.versionNumber}). Reject or accept it before proposing new terms.`,
+    );
+  }
+
+  // 4. Create the pending version atomically + bump deal.updatedAt (optimistic lock).
+  const created = await dealRepository.createPendingVersionAtomically(
+    dealId,
+    terms as DealTerms,
+    deal.updatedAt,
+    actor.id,
+    actor.role,
+  );
+
+  // 5. Audit log (only after successful persistence).
+  const previousAuthoritative = await dealRepository.getAuthoritativeVersion(
+    dealId,
+    deal.acceptedVersionNumber,
+  );
+
+  await dealRepository.createAuditLog({
+    actorId: actor.id,
+    dealId,
+    action: 'DEAL.TERMS_PROPOSED',
+    resourceType: 'DealVersion',
+    resourceId: created.id,
+    metadata: {
+      dealStatus: deal.status,
+      previousAuthoritativeVersionNumber: previousAuthoritative?.versionNumber ?? null,
+      proposedVersionNumber: created.versionNumber,
+      proposedTerms: terms,
+    },
+  });
+
+  // 6. Return the new terms view (refreshed, with the pending version visible).
+  return getDealTerms(dealId, actor.id, actor.role);
+}
+
+/**
+ * Creator accepts the current pending term proposal.
+ *
+ * The pending version becomes authoritative: its isPending is cleared and the
+ * deal's acceptedVersionNumber points to it. Any OTHER pending versions
+ * (theoretically none in MVP, but defensive) are also cleared — they remain
+ * in history but never become authoritative.
+ *
+ * Authorization & lifecycle:
+ *  - State-machine-gated through validateTermRefinement('ACCEPT_PROPOSAL').
+ *  - Only CREATOR participants of an ACCEPTED, FUNDED, or IN_PROGRESS deal.
+ *  - Requires that a pending version exists; otherwise 400.
+ *
+ * Concurrency:
+ *  - Optimistic lock on deal.updatedAt.
+ *
+ * Audit:
+ *  - Records DEAL.TERMS_ACCEPTED including the previous authoritative version
+ *    and the accepted version.
+ */
+export async function acceptProposal(
+  dealId: string,
+  actor: TransitionActor,
+): Promise<DealTermsView> {
+  // 1. Load deal.
+  const deal = await dealRepository.findById(dealId);
+  if (!deal) {
+    throw new InvalidStateError(`Deal '${dealId}' not found`);
+  }
+
+  // 2. State-machine authorization gate (lifecycle + role + participant).
+  validateTermRefinement(deal.status, 'ACCEPT_PROPOSAL', actor, {
+    isDealParticipant: { brandId: deal.brandId, creatorId: deal.creatorId },
+  });
+
+  // 3. Confirm there IS a pending version to accept.
+  const pending = await dealRepository.getPendingVersion(dealId);
+  if (!pending) {
+    throw new InvalidStateError(
+      `Deal '${dealId}' has no pending term proposal to accept`,
+    );
+  }
+
+  const previousAuthoritativeVersionNumber = deal.acceptedVersionNumber;
+
+  // 4. Atomically accept: clears pending flags, updates acceptedVersionNumber.
+  await dealRepository.acceptPendingVersion(
+    dealId,
+    pending.versionNumber,
+    deal.updatedAt,
+    actor.id,
+    actor.role,
+  );
+
+  // 5. Audit log.
+  await dealRepository.createAuditLog({
+    actorId: actor.id,
+    dealId,
+    action: 'DEAL.TERMS_ACCEPTED',
+    resourceType: 'DealVersion',
+    resourceId: pending.id,
+    metadata: {
+      dealStatus: deal.status,
+      previousAuthoritativeVersionNumber,
+      acceptedVersionNumber: pending.versionNumber,
+    },
+  });
+
+  // 6. Return refreshed terms view.
+  return getDealTerms(dealId, actor.id, actor.role);
+}
+
+/**
+ * Creator rejects the current pending term proposal.
+ *
+ * The pending version's isPending flag is cleared (rejected). The deal's
+ * acceptedVersionNumber is unchanged — the previously authoritative version stays
+ * authoritative. The rejected version remains visible in the audit history
+ * but NEVER becomes authoritative.
+ *
+ * Authorization & lifecycle:
+ *  - State-machine-gated through validateTermRefinement('REJECT_PROPOSAL').
+ *  - Only CREATOR participants of an ACCEPTED, FUNDED, or IN_PROGRESS deal.
+ *  - Requires that a pending version exists; otherwise 400.
+ *
+ * Concurrency:
+ *  - Optimistic lock on deal.updatedAt.
+ *
+ * Audit:
+ *  - Records DEAL.TERMS_REJECTED including the previous authoritative version
+ *    and the rejected version number.
+ */
+export async function rejectProposal(
+  dealId: string,
+  actor: TransitionActor,
+): Promise<DealTermsView> {
+  // 1. Load deal.
+  const deal = await dealRepository.findById(dealId);
+  if (!deal) {
+    throw new InvalidStateError(`Deal '${dealId}' not found`);
+  }
+
+  // 2. State-machine authorization gate (lifecycle + role + participant).
+  validateTermRefinement(deal.status, 'REJECT_PROPOSAL', actor, {
+    isDealParticipant: { brandId: deal.brandId, creatorId: deal.creatorId },
+  });
+
+  // 3. Confirm there IS a pending version to reject.
+  const pending = await dealRepository.getPendingVersion(dealId);
+  if (!pending) {
+    throw new InvalidStateError(
+      `Deal '${dealId}' has no pending term proposal to reject`,
+    );
+  }
+
+  const previousAuthoritativeVersionNumber = deal.acceptedVersionNumber;
+
+  // 4. Atomically clear all pending versions for this deal.
+  await dealRepository.rejectPendingVersions(
+    dealId,
+    deal.updatedAt,
+    actor.id,
+    actor.role,
+  );
+
+  // 5. Audit log.
+  await dealRepository.createAuditLog({
+    actorId: actor.id,
+    dealId,
+    action: 'DEAL.TERMS_REJECTED',
+    resourceType: 'DealVersion',
+    resourceId: pending.id,
+    metadata: {
+      dealStatus: deal.status,
+      previousAuthoritativeVersionNumber,
+      rejectedVersionNumber: pending.versionNumber,
+    },
+  });
+
+  // 6. Return refreshed terms view.
+  return getDealTerms(dealId, actor.id, actor.role);
+}
+
+/**
+ * Helper used by other services (notably PaymentService) to read the terms
+ * of the currently authoritative version of a deal. NEVER returns pending terms.
+ *
+ * Returns null if no authoritative version exists (which should never occur
+ * for a deal that has been created — v1 is always created as accepted).
+ */
+export async function getAuthoritativeTermsForDeal(
+  dealId: string,
+): Promise<{ versionNumber: number; terms: DealTerms } | null> {
+  const deal = await dealRepository.findById(dealId);
+  if (!deal) return null;
+
+  const authoritative = await dealRepository.getAuthoritativeVersion(
+    dealId,
+    deal.acceptedVersionNumber,
+  );
+  if (!authoritative) return null;
+
+  return {
+    versionNumber: authoritative.versionNumber,
+    terms: authoritative.terms as unknown as DealTerms,
+  };
 }

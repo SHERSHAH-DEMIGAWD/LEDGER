@@ -149,3 +149,19 @@ export type CreateDealInput = z.infer<typeof createDealSchema>;
 export type TransitionDealInput = z.infer<typeof transitionDealSchema>;
 export type InviteCreatorInput = z.infer<typeof inviteCreatorSchema>;
 export type ListDealsQuery = z.infer<typeof listDealsQuerySchema>;
+
+// ---------------------------------------------------------------------------------------
+// Term Refinement
+// ---------------------------------------------------------------------------------------
+
+export const proposeTermsSchema = z.object({
+  terms: dealTermsSchema,
+});
+
+export const acceptProposalSchema = z.object({});
+
+export const rejectProposalSchema = z.object({});
+
+export type ProposeTermsInput = z.infer<typeof proposeTermsSchema>;
+export type AcceptProposalInput = z.infer<typeof acceptProposalSchema>;
+export type RejectProposalInput = z.infer<typeof rejectProposalSchema>;

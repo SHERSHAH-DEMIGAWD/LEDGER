@@ -31,12 +31,14 @@ const mockFindById = vi.fn();
 const mockFindByIdWithAccessCheck = vi.fn();
 const mockCreateAuditLog = vi.fn().mockResolvedValue(undefined);
 const mockDealUpdateMany = vi.fn();
+const mockGetAuthoritativeVersion = vi.fn();
 
 vi.mock('../../src/repositories/DealRepository.js', () => ({
   dealRepository: {
     findById: (...args: unknown[]) => mockFindById(...args),
     findByIdWithAccessCheck: (...args: unknown[]) => mockFindByIdWithAccessCheck(...args),
     createAuditLog: (...args: unknown[]) => mockCreateAuditLog(...args),
+    getAuthoritativeVersion: (...args: unknown[]) => mockGetAuthoritativeVersion(...args),
   },
 }));
 
@@ -73,12 +75,14 @@ function makeAcceptedDeal(overrides?: Partial<DealWithVersions>): DealWithVersio
     status: 'ACCEPTED',
     contractId: null,
     fundingStatus: 'NOT_FUNDED',
+    acceptedVersionNumber: 1,
     createdAt: new Date(),
     updatedAt: new Date(),
     versions: [
       {
         id: 'v1',
         versionNumber: 1,
+        isPending: false,
         terms: { title: 'T', description: 'D', deliverables: [], paymentAmount: 50000, currency: 'USD' },
         createdAt: new Date(),
       },
@@ -107,6 +111,15 @@ describe('PaymentService.fundDeal', () => {
     service = new PaymentService(mockProvider as any);
     vi.clearAllMocks();
     mockDealUpdateMany.mockResolvedValue({ count: 1 });
+    // Default: getAuthoritativeVersion returns whatever deal was last set on
+    // findById's first version. Tests can override this.
+    mockGetAuthoritativeVersion.mockImplementation((_dealId: string) => {
+      const lastDeal = mockFindById.mock.results[mockFindById.mock.results.length - 1];
+      if (lastDeal && lastDeal.value && (lastDeal.value as any).versions) {
+        return (lastDeal.value as any).versions[0];
+      }
+      return null;
+    });
   });
 
   describe('authorization', () => {

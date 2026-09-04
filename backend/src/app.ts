@@ -11,6 +11,7 @@ import dealRoutes from './routes/deal.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import submissionRoutes from './routes/submission.routes.js';
 import invitationRoutes from './routes/invitation.routes.js';
+import termsRoutes from './routes/terms.routes.js';
 
 const app = express();
 
@@ -65,6 +66,7 @@ app.use('/deals', dealRoutes);
 app.use('/deals', paymentRoutes);
 app.use('/deals', submissionRoutes);
 app.use('/invitations', invitationRoutes);
+app.use('/deals', termsRoutes);
 
 // Error handling
 app.use(notFoundHandler);

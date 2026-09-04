@@ -42,6 +42,19 @@ export type DealAction =
   | 'RELEASE_PAYMENT'          // APPROVED -> COMPLETED (System, terminal) or RESOLVED -> COMPLETED (Brand)
   | 'CANCEL'                   // DRAFT or PENDING_ACCEPTANCE -> CANCELLED (Brand, terminal);
 
+/**
+ * Term-refinement actions. These DO NOT change the deal status.
+ * They operate on DealTerms (DealVersion) lifecycle: proposing, accepting, or
+ * rejecting a term change. They are gated through `validateTermRefinement()`
+ * in the same way state transitions are gated through `validateTransition()`.
+ *
+ * These are NOT DealAction because they do not produce a state transition.
+ */
+export type TermRefinementAction =
+  | 'PROPOSE_TERMS'
+  | 'ACCEPT_PROPOSAL'
+  | 'REJECT_PROPOSAL';
+
 export interface DealTransition {
   action: DealAction;
   from: DealStatus;
@@ -264,4 +277,138 @@ export function validateTransition(
   }
 
   return transition.to;
+}
+
+// =============================================================================
+// Term-Refinement Authorization
+// =============================================================================
+
+/**
+ * The lifecycle states in which term refinement is permitted.
+ *
+ * Why these states only:
+ *  - DRAFT          : Brand owns terms; no creator is bound yet, so any "refinement"
+ *                     is just an edit, not a counterparty proposal.
+ *  - PENDING_ACCEPTANCE : Creator hasn't accepted yet — they should accept or decline
+ *                     the existing invitation, not negotiate new terms.
+ *  - ACCEPTED       : Both parties are bound to terms. Refinement requires counterparty approval.
+ *  - FUNDED         : Money is committed against the current terms. New terms affect money.
+ *                     Refinement still requires counterparty approval.
+ *  - IN_PROGRESS    : Active delivery against terms. Any change must be mutual.
+ *  - SUBMITTED+     : Submission locks the deliverables (not the terms), but the deal
+ *                     is in review/closure — opening term refinement here invites
+ *                     game-playing on payment/dispute boundaries. Term refinement
+ *                     is not permitted.
+ *
+ * State machine is the single source of truth: changes here require code edits
+ * and are therefore auditable.
+ */
+export const TERM_REFINEMENT_ALLOWED_STATES: ReadonlySet<DealStatus> = new Set<DealStatus>([
+  'ACCEPTED',
+  'FUNDED',
+  'IN_PROGRESS',
+]);
+
+/**
+ * Role that may perform each term-refinement action.
+ *
+ * - PROPOSE_TERMS    : Only BRAND (the proposer) — counterparty must agree.
+ *                      ADMIN is intentionally NOT allowed here: term refinement is
+ *                      a commercial action between the two deal parties. ADMIN
+ *                      has elevated system access but does not unilaterally
+ *                      modify business terms. This preserves existing admin
+ *                      behavior (consistent with existing architecture).
+ * - ACCEPT_PROPOSAL  : Only CREATOR (the counterparty) — they decide whether
+ *                      the new terms are acceptable.
+ * - REJECT_PROPOSAL  : Only CREATOR (the counterparty).
+ */
+export interface TermRefinementRule {
+  action: TermRefinementAction;
+  allowedRoles: Role[];
+}
+
+export const TERM_REFINEMENT_RULES: readonly TermRefinementRule[] = [
+  { action: 'PROPOSE_TERMS', allowedRoles: ['BRAND'] },
+  { action: 'ACCEPT_PROPOSAL', allowedRoles: ['CREATOR'] },
+  { action: 'REJECT_PROPOSAL', allowedRoles: ['CREATOR'] },
+];
+
+/**
+ * Validate that an actor is permitted to perform a term-refinement action on
+ * a deal in a given lifecycle state.
+ *
+ * This is the parallel of `validateTransition()` for term refinement. It uses
+ * the same error conventions (InvalidStateError for state, UnauthorizedAccessError
+ * for role/participant) so callers and tests can rely on consistent semantics.
+ *
+ * Lifecycle rule:
+ *  - deal status must be in TERM_REFINEMENT_ALLOWED_STATES (ACCEPTED, FUNDED, IN_PROGRESS).
+ *  - deal must have an assigned creator (no terms to negotiate before invite).
+ *
+ * Role rule:
+ *  - PROPOSE_TERMS  → BRAND only
+ *  - ACCEPT_PROPOSAL → CREATOR only
+ *  - REJECT_PROPOSAL → CREATOR only
+ *
+ * Participant rule:
+ *  - Actor must be the brand (for PROPOSE) or the creator (for ACCEPT/REJECT).
+ *  - ADMIN/HRT are not deal participants and cannot refine terms.
+ */
+export function validateTermRefinement(
+  currentStatus: DealStatus,
+  action: TermRefinementAction,
+  actor: TransitionActor,
+  options: { isDealParticipant?: { brandId: string; creatorId: string | null } } = {},
+): void {
+  // Lifecycle guard
+  if (!TERM_REFINEMENT_ALLOWED_STATES.has(currentStatus)) {
+    throw new InvalidStateError(
+      `Cannot ${action === 'PROPOSE_TERMS' ? 'propose' : action === 'ACCEPT_PROPOSAL' ? 'accept' : 'reject'} terms in state '${currentStatus}'. Allowed states: ${Array.from(TERM_REFINEMENT_ALLOWED_STATES).join(', ')}.`,
+    );
+  }
+
+  // Creator must be assigned before any term refinement can happen
+  if (options.isDealParticipant && options.isDealParticipant.creatorId === null) {
+    throw new InvalidStateError(
+      'Cannot refine terms: deal has no assigned creator',
+    );
+  }
+
+  // Role rule
+  const rule = TERM_REFINEMENT_RULES.find((r) => r.action === action);
+  if (!rule) {
+    throw new InvalidStateError(`Unknown term-refinement action '${action}'`);
+  }
+  if (!rule.allowedRoles.includes(actor.role)) {
+    throw new UnauthorizedAccessError(
+      `Role '${actor.role}' is not permitted to perform '${action}'`,
+    );
+  }
+
+  // Participant rule (admin and HRT are NOT deal participants)
+  if (actor.role !== 'ADMIN' && actor.role !== 'HRT' && options.isDealParticipant) {
+    if (action === 'PROPOSE_TERMS') {
+      if (actor.id !== options.isDealParticipant.brandId) {
+        throw new UnauthorizedAccessError(
+          'Only the deal brand may propose term changes',
+        );
+      }
+    } else {
+      // ACCEPT_PROPOSAL / REJECT_PROPOSAL
+      if (actor.id !== options.isDealParticipant.creatorId) {
+        throw new UnauthorizedAccessError(
+          'Only the deal creator may accept or reject proposed terms',
+        );
+      }
+    }
+  }
+
+  // ADMIN/HRT are not allowed for any term-refinement action (even though
+  // they pass the lifecycle and role-rule checks above for some states).
+  // Term refinement is a commercial action reserved for deal participants.
+  if (actor.role === 'ADMIN' || actor.role === 'HRT') {
+    throw new UnauthorizedAccessError(
+      'Term refinement is a commercial action reserved for deal participants',
+    );
+  }
 }

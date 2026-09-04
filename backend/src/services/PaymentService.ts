@@ -20,6 +20,7 @@ import type { PaymentProvider } from '../integrations/payment/PaymentProvider.js
 import { InvalidStateError, UnauthorizedAccessError } from '../domain/errors/index.js';
 import { ConflictError } from '../middleware/errorHandler.js';
 import type { Role } from '../types.js';
+import type { DealTerms } from '../domain/value-objects/DealTerms.js';
 
 export interface PaymentActor {
   id: string;
@@ -91,9 +92,13 @@ export class PaymentService {
     }
 
     // 5. Call the simulated payment provider
+    // CRITICAL: must use the AUTHORITATIVE terms version (the one the parties
+    // have agreed to). Pending term proposals must NOT affect payment.
+    const authoritativeTerms = await this.getAuthoritativeTerms(deal);
+
     const intent = await this.provider.createIntent(
-      this.getPaymentAmount(deal),
-      this.getPaymentCurrency(deal),
+      this.getPaymentAmountFromTerms(authoritativeTerms),
+      this.getPaymentCurrencyFromTerms(authoritativeTerms),
       { dealId, actorId: actor.id },
     );
 
@@ -293,22 +298,37 @@ export class PaymentService {
     );
   }
 
-  private getPaymentAmount(deal: DealWithVersions): number {
-    const latestVersion = deal.versions[deal.versions.length - 1];
-    if (latestVersion?.terms) {
-      const terms = latestVersion.terms as { paymentAmount?: number };
-      return terms.paymentAmount ?? 0;
+  /**
+   * Resolve the authoritative terms for a deal, or throw if none exist.
+   *
+   * CRITICAL: This is the ONLY method that PaymentService uses to read terms.
+   * It NEVER returns a pending version. If no authoritative version exists,
+   * it throws (which should never happen for a valid deal).
+   *
+   * Uses deal.acceptedVersionNumber if set; falls back to the latest
+   * non-pending version (legacy state preservation).
+   */
+  private async getAuthoritativeTerms(deal: DealWithVersions): Promise<DealTerms> {
+    const authoritative = await dealRepository.getAuthoritativeVersion(
+      deal.id,
+      deal.acceptedVersionNumber,
+    );
+
+    if (!authoritative) {
+      throw new InvalidStateError(
+        `Payment error: deal '${deal.id}' has no authoritative terms version. This indicates a data integrity problem.`,
+      );
     }
-    return 0;
+
+    return authoritative.terms as unknown as DealTerms;
   }
 
-  private getPaymentCurrency(deal: DealWithVersions): string {
-    const latestVersion = deal.versions[deal.versions.length - 1];
-    if (latestVersion?.terms) {
-      const terms = latestVersion.terms as { currency?: string };
-      return terms.currency ?? 'USD';
-    }
-    return 'USD';
+  private getPaymentAmountFromTerms(terms: DealTerms): number {
+    return terms.paymentAmount ?? 0;
+  }
+
+  private getPaymentCurrencyFromTerms(terms: DealTerms): string {
+    return terms.currency ?? 'USD';
   }
 }
 

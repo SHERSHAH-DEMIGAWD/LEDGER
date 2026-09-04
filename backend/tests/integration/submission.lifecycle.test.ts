@@ -116,12 +116,14 @@ function makeDeal(overrides: Partial<DealWithVersions> = {}): DealWithVersions {
     status: 'DRAFT',
     contractId: null,
     fundingStatus: 'NOT_FUNDED',
+    acceptedVersionNumber: 1,
     createdAt: new Date(),
     updatedAt: new Date(),
     versions: [
       {
         id: 'v1',
         versionNumber: 1,
+        isPending: false,
         terms: {
           title: 'Test Deal',
           description: 'Test',

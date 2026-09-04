@@ -112,12 +112,14 @@ const DRAFT_DEAL = {
   status: 'DRAFT',
   contractId: null,
   fundingStatus: 'NOT_FUNDED',
+  acceptedVersionNumber: 1,
   createdAt: new Date(),
   updatedAt: new Date(),
   versions: [
     {
       id: 'v1',
       versionNumber: 1,
+      isPending: false,
       terms: SAMPLE_TERMS,
       createdAt: new Date(),
     },

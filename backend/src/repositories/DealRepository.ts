@@ -10,6 +10,10 @@ export interface DealWithVersions {
   brandId: string;
   creatorId: string | null;
   status: DealStatus;
+  // acceptedVersionNumber tracks the currently authoritative DealVersion.
+  // A value of null means no explicit acceptance (legacy state — use latest version).
+  // When a term proposal is accepted, this is updated to point to that version.
+  acceptedVersionNumber: number | null;
   contractId: string | null;
   fundingStatus: FundingStatus;
   createdAt: Date;
@@ -17,6 +21,9 @@ export interface DealWithVersions {
   versions: Array<{
     id: string;
     versionNumber: number;
+    // isPending=true means this version is awaiting counterparty acceptance.
+    // Pending versions must NOT be used for payments or authoritative terms.
+    isPending: boolean;
     terms: DealTerms;
     createdAt: Date;
   }>;
@@ -43,6 +50,9 @@ export class DealRepository {
   /**
    * Create a new Deal with its initial DealVersion.
    * Both are created atomically in a transaction.
+   *
+   * v1 is created as accepted (isPending=false) and the deal's
+   * acceptedVersionNumber is set to 1, so v1 is the authoritative version.
    */
   async create(input: CreateDealInput): Promise<DealWithVersions> {
     return prisma.$transaction(async (tx) => {
@@ -51,9 +61,11 @@ export class DealRepository {
           brandId: input.brandId,
           status: 'DRAFT',
           fundingStatus: 'NOT_FUNDED',
+          acceptedVersionNumber: 1,
           versions: {
             create: {
               versionNumber: 1,
+              isPending: false,
               terms: input.terms as unknown as Prisma.InputJsonValue,
             },
           },
@@ -280,9 +292,57 @@ export class DealRepository {
   }
 
   /**
-   * Create a new DealVersion (for term updates).
+   * Get the currently authoritative (accepted) DealVersion for a Deal.
+   *
+   * Authoritative resolution rules:
+   * 1. If deal.acceptedVersionNumber is set, return the version with that versionNumber.
+   * 2. Otherwise (legacy state — no acceptedVersionNumber set), return the highest
+   *    versionNumber that is NOT pending (preserving pre-refinement behavior).
+   * 3. If no accepted version can be found, returns null.
+   *
+   * NEVER returns a pending version.
    */
-  async createVersion(
+  async getAuthoritativeVersion(
+    dealId: string,
+    acceptedVersionNumber: number | null,
+  ): Promise<DealVersion | null> {
+    if (acceptedVersionNumber !== null) {
+      return prisma.dealVersion.findFirst({
+        where: {
+          dealId,
+          versionNumber: acceptedVersionNumber,
+          isPending: false,
+        },
+      });
+    }
+
+    // Legacy fallback: the latest non-pending version
+    return prisma.dealVersion.findFirst({
+      where: { dealId, isPending: false },
+      orderBy: { versionNumber: 'desc' },
+    });
+  }
+
+  /**
+   * Get the currently pending DealVersion for a Deal (if any).
+   *
+   * Returns the unique pending proposal for a deal, or null if none exists.
+   * Multiple concurrent pending versions are NOT supported by design.
+   */
+  async getPendingVersion(dealId: string): Promise<DealVersion | null> {
+    return prisma.dealVersion.findFirst({
+      where: { dealId, isPending: true },
+      orderBy: { versionNumber: 'desc' },
+    });
+  }
+
+  /**
+   * Create a new pending DealVersion (for term proposals).
+   *
+   * Increments versionNumber monotonically. Caller is responsible for ensuring
+   * no other pending version exists for this deal (use getPendingVersion first).
+   */
+  async createPendingVersion(
     dealId: string,
     terms: DealTerms,
     requesterId: string,
@@ -298,8 +358,200 @@ export class DealRepository {
       data: {
         dealId,
         versionNumber: nextVersion,
+        isPending: true,
         terms: terms as unknown as Prisma.InputJsonValue,
       },
+    });
+  }
+
+  /**
+   * Create a new pending DealVersion atomically with optimistic locking on the
+   * deal row. This is the preferred method for creating a proposal — it ensures
+   * the proposal is only created if the deal hasn't been modified concurrently.
+   *
+   * Throws DealVersionConflictError if the deal was modified concurrently.
+   */
+  async createPendingVersionAtomically(
+    dealId: string,
+    terms: DealTerms,
+    expectedUpdatedAt: Date,
+    requesterId: string,
+    requesterRole: string,
+  ): Promise<DealVersion> {
+    // Access check (throws NotFoundError or UnauthorizedAccessError if fails)
+    const existingDeal = await this.findByIdWithAccessCheck(
+      dealId,
+      requesterId,
+      requesterRole,
+    );
+    const expected =
+      expectedUpdatedAt instanceof Date
+        ? expectedUpdatedAt
+        : existingDeal.updatedAt;
+
+    return prisma.$transaction(async (tx) => {
+      // Optimistic lock on the deal row
+      const lockResult = await tx.deal.updateMany({
+        where: { id: dealId, updatedAt: expected },
+        data: { updatedAt: new Date() },
+      });
+
+      if (lockResult.count === 0) {
+        const { DealVersionConflictError } = await import('../domain/errors/index.js');
+        throw new DealVersionConflictError(
+          'Deal was modified by another request. Please reload and retry.',
+        );
+      }
+
+      // Get the next version number
+      const latest = await tx.dealVersion.findFirst({
+        where: { dealId },
+        orderBy: { versionNumber: 'desc' },
+      });
+      const nextVersion = (latest?.versionNumber ?? 0) + 1;
+
+      // Create the pending version
+      const created = await tx.dealVersion.create({
+        data: {
+          dealId,
+          versionNumber: nextVersion,
+          isPending: true,
+          terms: terms as unknown as Prisma.InputJsonValue,
+        },
+      });
+
+      return created;
+    });
+  }
+
+  /**
+   * Atomically accept a pending proposal and reject any other pending versions.
+   *
+   * On success:
+   * - The targeted pending version is marked isPending=false (becomes authoritative).
+   * - Any other pending versions for this deal are marked isPending=false too
+   *   (they were superseded; they remain in history as non-pending, non-authoritative).
+   * - The deal's acceptedVersionNumber is updated to point to the accepted version.
+   *
+   * Returns the updated deal with all versions.
+   *
+   * Concurrency-safe: gated on the deal's updatedAt to reject concurrent updates.
+   * Throws DealVersionConflictError if the deal was modified concurrently.
+   */
+  async acceptPendingVersion(
+    dealId: string,
+    pendingVersionNumber: number,
+    expectedUpdatedAt: Date,
+    requesterId: string,
+    requesterRole: string,
+  ): Promise<DealWithVersions> {
+    // First load with access check to validate and get authoritative state.
+    const existingDeal = await this.findByIdWithAccessCheck(
+      dealId,
+      requesterId,
+      requesterRole,
+    );
+    const expected =
+      expectedUpdatedAt instanceof Date
+        ? expectedUpdatedAt
+        : existingDeal.updatedAt;
+
+    return prisma.$transaction(async (tx) => {
+      // Optimistic lock on the deal row
+      const lockResult = await tx.deal.updateMany({
+        where: { id: dealId, updatedAt: expected },
+        data: {
+          acceptedVersionNumber: pendingVersionNumber,
+          updatedAt: new Date(),
+        },
+      });
+
+      if (lockResult.count === 0) {
+        const { DealVersionConflictError } = await import('../domain/errors/index.js');
+        throw new DealVersionConflictError(
+          'Deal was modified by another request. Please reload and retry.',
+        );
+      }
+
+      // Mark ALL pending versions for this deal as non-pending.
+      // The accepted one is the new authoritative; the rest become historical
+      // (they never become authoritative, they're just no longer "pending").
+      await tx.dealVersion.updateMany({
+        where: { dealId, isPending: true },
+        data: { isPending: false },
+      });
+
+      const deal = await tx.deal.findUnique({
+        where: { id: dealId },
+        include: {
+          versions: { orderBy: { versionNumber: 'asc' } },
+        },
+      });
+
+      if (!deal) {
+        throw new NotFoundError('Deal', dealId);
+      }
+
+      return this.mapToDealWithVersions(deal);
+    });
+  }
+
+  /**
+   * Reject all pending versions for a deal. They remain in history as
+   * non-pending, non-authoritative versions; the deal's acceptedVersionNumber
+   * is unchanged.
+   *
+   * Concurrency-safe: gated on the deal's updatedAt.
+   */
+  async rejectPendingVersions(
+    dealId: string,
+    expectedUpdatedAt: Date,
+    requesterId: string,
+    requesterRole: string,
+  ): Promise<DealWithVersions> {
+    const existingDeal = await this.findByIdWithAccessCheck(
+      dealId,
+      requesterId,
+      requesterRole,
+    );
+    const expected =
+      expectedUpdatedAt instanceof Date
+        ? expectedUpdatedAt
+        : existingDeal.updatedAt;
+
+    return prisma.$transaction(async (tx) => {
+      // Optimistic lock — even though we're not changing acceptedVersionNumber,
+      // we still gate the operation on updatedAt for consistency.
+      const lockResult = await tx.deal.updateMany({
+        where: { id: dealId, updatedAt: expected },
+        data: { updatedAt: new Date() },
+      });
+
+      if (lockResult.count === 0) {
+        const { DealVersionConflictError } = await import('../domain/errors/index.js');
+        throw new DealVersionConflictError(
+          'Deal was modified by another request. Please reload and retry.',
+        );
+      }
+
+      // Mark all pending versions as non-pending (rejected; historical record kept)
+      await tx.dealVersion.updateMany({
+        where: { dealId, isPending: true },
+        data: { isPending: false },
+      });
+
+      const deal = await tx.deal.findUnique({
+        where: { id: dealId },
+        include: {
+          versions: { orderBy: { versionNumber: 'asc' } },
+        },
+      });
+
+      if (!deal) {
+        throw new NotFoundError('Deal', dealId);
+      }
+
+      return this.mapToDealWithVersions(deal);
     });
   }
 
@@ -398,6 +650,7 @@ export class DealRepository {
       brandId: deal.brandId,
       creatorId: deal.creatorId,
       status: deal.status as DealStatus,
+      acceptedVersionNumber: deal.acceptedVersionNumber,
       contractId: deal.contractId,
       fundingStatus: deal.fundingStatus as FundingStatus,
       createdAt: deal.createdAt,
@@ -405,6 +658,7 @@ export class DealRepository {
       versions: deal.versions.map((v) => ({
         id: v.id,
         versionNumber: v.versionNumber,
+        isPending: v.isPending,
         terms: v.terms as unknown as DealTerms,
         createdAt: v.createdAt,
       })),
