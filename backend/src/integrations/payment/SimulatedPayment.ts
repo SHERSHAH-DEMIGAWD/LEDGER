@@ -27,6 +27,32 @@ export class SimulatedPayment implements PaymentProvider {
     };
   }
 
+  /**
+   * Create a payment intent with a specific intent ID.
+   *
+   * This method is called AFTER the Payment DB row has been inserted
+   * (with the same intentId). The intentId is pre-committed to the DB
+   * so concurrent requests see it and get a unique-violation error.
+   *
+   * In production (Stripe), this would pass intentId as the idempotency
+   * key so the Stripe API returns the same intent on retry.
+   * In simulation, we simply return an intent with the given ID.
+   */
+  async createIdempotentIntent(
+    intentId: string,
+    amount: number,
+    currency: string,
+    metadata: Record<string, string>,
+  ): Promise<PaymentIntent> {
+    return {
+      id: intentId,
+      status: 'PENDING',
+      amount,
+      currency,
+      metadata,
+    };
+  }
+
   async confirm(intentId: string): Promise<PaymentResult> {
     this.resultCounter++;
     return {

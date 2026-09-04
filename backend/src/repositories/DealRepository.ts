@@ -16,6 +16,9 @@ export interface DealWithVersions {
   acceptedVersionNumber: number | null;
   contractId: string | null;
   fundingStatus: FundingStatus;
+  // paymentRecordId is the FK to the Payment record. Set after successful funding.
+  // Used by PaymentService for reconciliation and by getPaymentStatus.
+  paymentRecordId: string | null;
   createdAt: Date;
   updatedAt: Date;
   versions: Array<{
@@ -653,6 +656,7 @@ export class DealRepository {
       acceptedVersionNumber: deal.acceptedVersionNumber,
       contractId: deal.contractId,
       fundingStatus: deal.fundingStatus as FundingStatus,
+      paymentRecordId: deal.paymentRecordId,
       createdAt: deal.createdAt,
       updatedAt: deal.updatedAt,
       versions: deal.versions.map((v) => ({

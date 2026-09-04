@@ -240,6 +240,19 @@ describe('Payment Routes — POST /deals/:id/refund', () => {
       .set('Authorization', authHeader());
     expect(res.status).toBe(403);
   });
+
+  it('returns 409 when service throws ConflictError (concurrent refund — P0-2 fix)', async () => {
+    // P0-2: The old code threw InvalidStateError on concurrent refund,
+    // which mapped to HTTP 500. The fix makes it throw ConflictError (409).
+    mockRefundDeal.mockRejectedValue(
+      new ConflictError('Deal was modified by another request. Please reload and retry.'),
+    );
+    const res = await request(app)
+      .post('/deals/deal-1/refund')
+      .set('Authorization', authHeader());
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('RES_002');
+  });
 });
 
 // ---------------------------------------------------------------------------------------
@@ -281,6 +294,22 @@ describe('Payment Routes — GET /deals/:id/payment-status', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.fundingStatus).toBe('NOT_FUNDED');
+  });
+
+  it('returns the actual provider paymentId for a funded deal (P1-5 fix)', async () => {
+    // P1-5: Previously paymentId was always null. Now it is the
+    // provider's payment/charge ID, persisted on the Payment record.
+    mockGetPaymentStatus.mockResolvedValue({
+      dealId: 'deal-1',
+      fundingStatus: 'FUNDED',
+      paymentId: 'sim_payment_xxx',
+    });
+    const res = await request(app)
+      .get('/deals/deal-1/payment-status')
+      .set('Authorization', authHeader());
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.paymentId).toBe('sim_payment_xxx');
   });
 
   it('passes user ID and role from JWT to service', async () => {

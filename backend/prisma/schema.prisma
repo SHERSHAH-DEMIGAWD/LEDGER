@@ -91,6 +91,11 @@ model Deal {
   // NOTE: Deal terms are NOT stored here. DealVersion is the authoritative source for versioned terms.
   contractId            String?
   fundingStatus         FundingStatus @default(NOT_FUNDED)
+  // paymentRecordId is the FK to the Payment record. Set on successful funding.
+  // Used for fast lookup of the associated payment from the Deal row.
+  // (The canonical relation is Payment.dealId → Deal.id, with the unique
+  //  constraint on Payment.dealId enforcing the one-to-one.)
+  paymentRecordId       String?
   versions              DealVersion[]
   auditLogs             AuditLog[]
   createdAt             DateTime      @default(now())
@@ -100,6 +105,27 @@ model Deal {
   @@index([creatorId])
   @@index([status])
   @@index([fundingStatus])
+}
+
+// Payment record — one per deal (enforced by unique dealId constraint).
+// The unique constraint is the atomic guard against concurrent fundDeal
+// requests creating multiple payment intents. The losing concurrent
+// request gets a P2002 unique-violation error and never reaches the
+// payment provider.
+model Payment {
+  id        String   @id @default(uuid())
+  dealId    String   @unique
+  amount    Int
+  currency  String   @default("USD")
+  status    String   @default("PENDING")
+  paymentId String   // The provider's payment/charge ID (final, post-confirm)
+  intentId  String   // The provider's intent ID (pre-confirm, used in audit trail)
+  actorId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([actorId])
 }
 
 model DealVersion {
