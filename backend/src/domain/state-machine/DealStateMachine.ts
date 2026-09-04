@@ -222,6 +222,16 @@ export function validateTransition(
   actor: TransitionActor,
   options: { isDealParticipant?: { brandId: string; creatorId: string | null } } = {},
 ): DealStatus {
+  // Explicit terminal-state guard (defense-in-depth). The transition table
+  // below has no entries from terminal states, so canTransition would already
+  // reject these — but this makes the invariant explicit and fail-safe if a
+  // transition is ever accidentally added from a terminal state.
+  if (isTerminal(currentStatus)) {
+    throw new InvalidStateError(
+      `Cannot perform action '${action}' from terminal state '${currentStatus}'`,
+    );
+  }
+
   const transition = canTransition(currentStatus, action);
   if (!transition) {
     throw new InvalidStateError(

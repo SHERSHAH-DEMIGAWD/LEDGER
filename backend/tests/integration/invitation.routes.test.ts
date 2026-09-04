@@ -23,7 +23,14 @@ const mockDealService = {
   transitionDeal: vi.fn(),
 };
 
+const mockDealRepository = {
+  createAuditLog: vi.fn().mockResolvedValue(undefined),
+};
+
 vi.mock('../../src/services/DealService.js', () => mockDealService);
+vi.mock('../../src/repositories/DealRepository.js', () => ({
+  dealRepository: mockDealRepository,
+}));
 
 const { default: invitationRouter } = await import('../../src/routes/invitation.routes.js');
 const { errorHandler, notFoundHandler } = await import('../../src/middleware/errorHandler.js');

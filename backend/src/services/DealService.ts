@@ -170,6 +170,11 @@ export async function transitionDeal(
   );
 
   // 4. Audit log
+  // FAILURE ISOLATION: this audit log entry is ONLY created after the
+  // successful validation above (steps 1-3). If any validation step throws
+  // (InvalidStateError, UnauthorizedAccessError, DealVersionConflictError),
+  // this line is never reached. Therefore, no misleading "successful" event
+  // is written for failed/invalid/unauthorized operations.
   await dealRepository.createAuditLog({
     actorId: actor.id,
     dealId,
@@ -221,10 +226,34 @@ export async function inviteCreator(
     throw new InvalidStateError('Only the deal brand can invite creators');
   }
 
-  // 3. Can only invite from DRAFT state
+  // 3. Validate that the target creator exists and has the CREATOR role.
+  //    Prevents inviting non-existent users or users with the wrong role.
+  const targetUser = await prisma.user.findUnique({
+    where: { id: creatorId },
+    select: { id: true, role: true },
+  });
+  if (!targetUser) {
+    throw new InvalidStateError(`Creator user '${creatorId}' not found`);
+  }
+  if (targetUser.role !== 'CREATOR') {
+    throw new InvalidStateError(
+      `User '${creatorId}' does not have CREATOR role and cannot be invited to deals`,
+    );
+  }
+
+  // 4. Can only invite from DRAFT state
   if (deal.status !== 'DRAFT') {
     throw new InvalidStateError(
       `Cannot invite creator from state '${deal.status}'. Deal must be in DRAFT.`,
+    );
+  }
+
+  // 5. Guard against re-inviting when a creator is already assigned.
+  //    The state check above covers PENDING_ACCEPTANCE+, but a DRAFT deal
+  //    should never already have a creatorId — reject defensively.
+  if (deal.creatorId !== null && deal.creatorId !== creatorId) {
+    throw new InvalidStateError(
+      `Deal already has an assigned creator and cannot be re-invited`,
     );
   }
 
@@ -351,7 +380,9 @@ export async function getDealHistory(
 
   const logs = await prisma.auditLog.findMany({
     where: { dealId },
-    orderBy: { timestamp: 'asc' },
+    // Deterministic ordering: primary by timestamp, secondary by id for ties.
+    // Uses database server time which is authoritative (not client-supplied).
+    orderBy: [{ timestamp: 'asc' }, { id: 'asc' }],
     select: {
       id: true,
       action: true,

@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { mockAwareAuth } from '../middleware/mockAuth.js';
-import { listCreatorInvitations, transitionDeal } from '../services/DealService.js';
+import { listCreatorInvitations, transitionDeal, getDeal } from '../services/DealService.js';
+import { dealRepository } from '../repositories/DealRepository.js';
 import type { DealAction } from '../domain/state-machine/DealStateMachine.js';
 
 const router = Router();
@@ -37,6 +38,8 @@ router.get('/', mockAwareAuth, async (req: Request, res: Response, next: NextFun
  * Delegates to the existing DealStateMachine transition
  * (PENDING_ACCEPTANCE → ACCEPTED, CREATOR-only). The state machine
  * enforces both role and deal-participation at the server level.
+ *
+ * Creates an INVITATION.ACCEPTED audit log entry for the invitation lifecycle.
  */
 router.post(
   '/:id/accept',
@@ -53,6 +56,19 @@ router.post(
         },
       );
 
+      // Create invitation-specific audit log for the lifecycle
+      await dealRepository.createAuditLog({
+        actorId: req.user!.id,
+        dealId: id,
+        action: 'INVITATION.ACCEPTED',
+        resourceType: 'Invitation',
+        resourceId: id,
+        metadata: {
+          fromStatus: 'PENDING_ACCEPTANCE',
+          toStatus: 'ACCEPTED',
+        },
+      });
+
       res.json({ success: true, data: { deal } });
     } catch (error) {
       next(error);
@@ -66,6 +82,8 @@ router.post(
  *
  * Delegates to the existing DealStateMachine transition
  * (PENDING_ACCEPTANCE → DECLINED, CREATOR-only, terminal).
+ *
+ * Creates an INVITATION.DECLINED audit log entry for the invitation lifecycle.
  */
 router.post(
   '/:id/decline',
@@ -81,6 +99,19 @@ router.post(
           role: req.user!.role as 'BRAND' | 'CREATOR' | 'HRT' | 'ADMIN',
         },
       );
+
+      // Create invitation-specific audit log for the lifecycle
+      await dealRepository.createAuditLog({
+        actorId: req.user!.id,
+        dealId: id,
+        action: 'INVITATION.DECLINED',
+        resourceType: 'Invitation',
+        resourceId: id,
+        metadata: {
+          fromStatus: 'PENDING_ACCEPTANCE',
+          toStatus: 'DECLINED',
+        },
+      });
 
       res.json({ success: true, data: { deal } });
     } catch (error) {

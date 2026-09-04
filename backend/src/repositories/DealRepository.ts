@@ -342,9 +342,12 @@ export class DealRepository {
     // ADMIN can access any deal
     if (requesterRole === 'ADMIN') return;
 
-    // HRT has limited read access (only for disputes) — implemented at service level
-    // For now, HRT can view deals
-    if (requesterRole === 'HRT') return;
+    // HRT has limited read access — only for deals in DISPUTED or RESOLVED status
+    // (the dispute review workflow). HRT cannot view deals in other states.
+    if (requesterRole === 'HRT') {
+      if (deal.status === 'DISPUTED' || deal.status === 'RESOLVED') return;
+      throw new UnauthorizedAccessError('HRT can only access deals in dispute resolution');
+    }
 
     // Creator can access if they are the invited creator
     if (requesterRole === 'CREATOR') {
