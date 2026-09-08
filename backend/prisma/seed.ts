@@ -22,10 +22,10 @@
 
 import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { config } from '../src/config.js';
 
 const prisma = new PrismaClient();
 
-const BCRYPT_ROUNDS = 10;
 const SHARED_PASSWORD = 'Test1234';
 
 // ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ const SHARED_PASSWORD = 'Test1234';
 // ---------------------------------------------------------------------------
 
 async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, BCRYPT_ROUNDS);
+  return bcrypt.hash(password, config.auth.bcryptRounds);
 }
 
 // ---------------------------------------------------------------------------

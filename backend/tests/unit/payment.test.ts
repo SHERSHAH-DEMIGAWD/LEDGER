@@ -26,7 +26,7 @@ process.env.DATABASE_URL ??= 'postgresql://test:test@localhost:5432/test';
 
 import { PaymentService } from '../../src/services/PaymentService.js';
 import type { DealWithVersions } from '../../src/repositories/DealRepository.js';
-import { InvalidStateError, UnauthorizedAccessError } from '../../src/domain/errors/index.js';
+import { InvalidStateError, UnauthorizedAccessError, DealTermsValidationError } from '../../src/domain/errors/index.js';
 import { ConflictError } from '../../src/middleware/errorHandler.js';
 
 // ---------------------------------------------------------------------------------------
@@ -273,6 +273,44 @@ describe('PaymentService.fundDeal', () => {
       await expect(
         service.fundDeal('nonexistent', { id: 'brand-1', role: 'BRAND' }),
       ).rejects.toThrow(InvalidStateError);
+    });
+
+    // Test zero payment amount validation
+    it('throws DealTermsValidationError when payment amount is zero', async () => {
+      const dealWithZeroAmount = {
+        ...makeAcceptedDeal(),
+        versions: [{
+          ...makeAcceptedDeal().versions[0],
+          terms: { 
+            ...makeAcceptedDeal().versions[0].terms,
+            paymentAmount: 0 
+          }
+        }]
+      };
+      mockFindById.mockResolvedValue(dealWithZeroAmount);
+
+      await expect(
+        service.fundDeal('deal-1', { id: 'brand-1', role: 'BRAND' }),
+      ).rejects.toThrow(DealTermsValidationError);
+    });
+
+    // Test negative payment amount validation
+    it('throws DealTermsValidationError when payment amount is negative', async () => {
+      const dealWithNegativeAmount = {
+        ...makeAcceptedDeal(),
+        versions: [{
+          ...makeAcceptedDeal().versions[0],
+          terms: { 
+            ...makeAcceptedDeal().versions[0].terms,
+            paymentAmount: -50000 
+          }
+        }]
+      };
+      mockFindById.mockResolvedValue(dealWithNegativeAmount);
+
+      await expect(
+        service.fundDeal('deal-1', { id: 'brand-1', role: 'BRAND' }),
+      ).rejects.toThrow(DealTermsValidationError);
     });
   });
 

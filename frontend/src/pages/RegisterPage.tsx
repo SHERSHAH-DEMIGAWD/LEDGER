@@ -65,7 +65,6 @@ export function RegisterPage() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: 'var(--space-6)',
-        background: 'var(--color-institution-navy)',
         gap: 'var(--space-6)',
       }}
     >
@@ -88,7 +87,7 @@ export function RegisterPage() {
         style={{
           width: '100%',
           maxWidth: '420px',
-          background: 'var(--color-parchment-warm)',
+          background: 'rgba(255, 255, 255, 0.95)',
           border: '1px solid var(--color-border)',
           borderRadius: 'var(--radius-md)',
           padding: 'var(--space-6)',
@@ -199,18 +198,9 @@ export function RegisterPage() {
                     style={{
                       flex: 1,
                       padding: '8px 12px',
-                      background:
-                        role === r
-                          ? 'var(--color-institution-navy)'
-                          : 'var(--color-parchment)',
-                      color: role === r
-                        ? 'var(--color-text-on-dark)'
-                        : 'var(--color-text-primary)',
-                      border: `1px solid ${
-                        role === r
-                          ? 'var(--color-institution-navy)'
-                          : 'var(--color-border)'
-                      }`,
+                      background: role === r ? 'var(--color-institution-navy)' : 'var(--color-parchment)',
+                      color: role === r ? 'var(--color-text-on-dark)' : 'var(--color-text-primary)',
+                      border: `1px solid ${role === r ? 'var(--color-institution-navy)' : 'var(--color-border)'}`,
                       borderRadius: 'var(--radius-sm)',
                       fontWeight: role === r ? 600 : 500,
                       fontSize: 'var(--text-sm)',

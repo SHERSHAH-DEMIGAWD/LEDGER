@@ -1,48 +1,58 @@
 /**
- * Ledger Design Tokens & Book Metaphor Styles
+ * Ledger Design System
  *
- * Physical Institutional Casebook system:
- * - Spine: Dark mahogany & leather gradient frame
- * - Cover: Inset gold-stamped leather cover
- * - Record: Physical parchment sheet with paper-stack depth & bookmarks
- * - Seals: Embossed wax and stamped archival insignia
+ * Visual direction:
+ * - Cinematic black register
+ * - Silver ₹1 coin / archival metallic atmosphere
+ * - Warm light entering from upper-left
+ * - Antique gold typography and rules
+ * - Deep light falloff toward lower-right
+ * - Editorial / institutional rather than SaaS
  */
 
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* Spine & Outer Binding */
-  --color-binding-spine: #16120e;
-  --color-binding-leather: #1c1611;
-  --color-binding-leather-dark: #120e0b;
-  --color-binding-border: #4a3b29;
+  /* =========================================================
+     CORE MATERIALS
+     ========================================================= */
 
-  /* Parchment Casebook Pages */
-  --color-parchment-cream: #faf7f0;
-  --color-parchment-base: #f4eee2;
-  --color-parchment-warm: #ebdcc6;
-  --color-parchment-aged: #e2cfb2;
-  --color-parchment-shadow: rgba(45, 30, 15, 0.14);
+  --color-binding-spine: #050505;
+  --color-binding-leather: #0b0907;
+  --color-binding-leather-dark: #030303;
+  --color-binding-border: rgba(196, 151, 66, 0.22);
 
-  /* Gold Foil & Engraving */
-  --color-gold-bright: #d4af37;
-  --color-gold-foil: #b8860b;
-  --color-gold-pale: #cbb88a;
-  --color-gold-dark: #6e541b;
-  --color-gold-bg: rgba(184, 134, 11, 0.08);
+  /* Dark cinematic surfaces */
+  --color-surface: #0a0908;
+  --color-surface-raised: #11100e;
+  --color-surface-soft: #171410;
 
-  /* Ink & Typography */
-  --color-ink-primary: #1b1612;
-  --color-ink-secondary: #4a3e32;
-  --color-ink-muted: #827361;
-  --color-ink-faint: #b3a594;
+  /* Warm metallic gold */
+  --color-gold-bright: #e0bd72;
+  --color-gold-foil: #b8893d;
+  --color-gold-pale: #d5bd8b;
+  --color-gold-dark: #6e5227;
+  --color-gold-bg: rgba(190, 143, 61, 0.07);
 
-  /* Typography Fonts */
+  /* Silver / coin */
+  --color-silver: #aaa69b;
+  --color-silver-bright: #d2cec3;
+  --color-silver-dark: #57544e;
+
+  /* Typography */
+  --color-ink-primary: #eee6d5;
+  --color-ink-secondary: #b7ad9c;
+  --color-ink-muted: #766e62;
+  --color-ink-faint: #4c4842;
+
+  /* =========================================================
+     TYPOGRAPHY
+     ========================================================= */
+
   --font-display: 'Playfair Display', Georgia, serif;
-  --font-sans: 'Source Sans 3', -apple-system, sans-serif;
-  --font-mono: 'SF Mono', Consolas, monospace;
+  --font-sans: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'SF Mono', Consolas, 'Liberation Mono', monospace;
 
-  /* Type Scale */
   --text-xs: 11px;
   --text-sm: 13px;
   --text-base: 14px;
@@ -52,6 +62,14 @@
   --text-2xl: 28px;
   --text-3xl: 36px;
 
+  /* Editorial display sizes */
+  --text-display-sm: clamp(42px, 5vw, 68px);
+  --text-display: clamp(56px, 7vw, 104px);
+
+  /* =========================================================
+     SPACING
+     ========================================================= */
+
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -60,33 +78,81 @@
   --space-6: 32px;
   --space-7: 48px;
   --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 128px;
 
   --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
+  --radius-sm: 3px;
+  --radius-md: 5px;
 
+  /*
+   * Kept for compatibility with components that still reference
+   * the previous layout token.
+   */
   --layout-sidebar-width: 256px;
+
+  /* =========================================================
+     REGISTER LIGHTING
+     ========================================================= */
+
+  --register-light-gold: rgba(224, 189, 114, 0.16);
+  --register-light-warm: rgba(177, 125, 49, 0.10);
+  --register-light-soft: rgba(255, 226, 163, 0.055);
+
+  --register-shadow: rgba(0, 0, 0, 0.72);
+
+  /* =========================================================
+     MOTION
+     ========================================================= */
+
+  --ease-register: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
+
+
+/* =============================================================
+   GLOBAL RESET
+   ============================================================= */
 
 * {
   box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   padding: 0;
-  background: var(--color-binding-spine);
+  min-height: 100vh;
+
+  background: #050505;
   color: var(--color-ink-primary);
+
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  min-height: 100vh;
+
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  -webkit-font-smoothing: antialiased;
-  background-image:
-    radial-gradient(circle at 50% 30%, rgba(184, 134, 11, 0.03) 0%, transparent 60%),
-    radial-gradient(circle at 10% 80%, rgba(30, 20, 10, 0.4) 0%, transparent 50%);
+  overflow-x: hidden;
+
+  /*
+   * Extremely subtle physical grain.
+   * The gradients are intentionally almost invisible.
+   */
+  background:
+    radial-gradient(
+      ellipse 75% 65% at 5% 8%,
+      rgba(192, 142, 59, 0.055),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 70% 80% at 100% 100%,
+      rgba(0, 0, 0, 0.9),
+      transparent 70%
+    ),
+    #050505;
 }
 
 a {
@@ -102,65 +168,688 @@ button {
   color: inherit;
 }
 
-/* Institutional Frame Grid */
+
+/* =============================================================
+   GLOBAL LEDGER SHELL
+   ============================================================= */
+
 .ledger-app-shell {
-  display: grid;
-  grid-template-columns: var(--layout-sidebar-width) 1fr;
+  position: relative;
+
   min-height: 100vh;
-  background: #0d0a08;
+
+  background:
+    radial-gradient(
+      ellipse 80% 90% at 0% 0%,
+      rgba(187, 136, 52, 0.075),
+      transparent 58%
+    ),
+    linear-gradient(
+      145deg,
+      #12100d 0%,
+      #090807 34%,
+      #050505 68%,
+      #020202 100%
+    );
+
+  overflow: hidden;
 }
+
+
+/* =============================================================
+   ATMOSPHERIC LIGHTING
+   ============================================================= */
+
+.ledger-atmosphere {
+  position: fixed;
+  inset: 0;
+
+  pointer-events: none;
+  z-index: 0;
+
+  overflow: hidden;
+}
+
+
+/*
+ * Primary light source.
+ *
+ * IMPORTANT:
+ * Light originates from the upper-left and falls diagonally
+ * across the environment.
+ */
+.ledger-light-beam {
+  position: absolute;
+
+  width: 125vw;
+  height: 38vh;
+
+  top: -15vh;
+  left: -22vw;
+
+  background:
+    linear-gradient(
+      116deg,
+      rgba(255, 220, 153, 0.18) 0%,
+      rgba(221, 176, 89, 0.10) 22%,
+      rgba(155, 108, 39, 0.045) 43%,
+      transparent 70%
+    );
+
+  transform: rotate(7deg);
+
+  filter: blur(30px);
+
+  opacity: 0.9;
+}
+
+
+/*
+ * Localized warm haze near the light source.
+ */
+.ledger-light-haze {
+  position: absolute;
+
+  width: 62vw;
+  height: 72vh;
+
+  top: -18vh;
+  left: -16vw;
+
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgba(238, 196, 111, 0.09) 0%,
+      rgba(181, 128, 48, 0.045) 34%,
+      transparent 70%
+    );
+
+  filter: blur(20px);
+}
+
+
+/*
+ * Fine grain layer.
+ *
+ * Deliberately subtle — it should be felt rather than seen.
+ */
+.ledger-grain {
+  position: absolute;
+  inset: 0;
+
+  opacity: 0.035;
+
+  background-image:
+    radial-gradient(
+      circle at 20% 30%,
+      rgba(255, 255, 255, 0.7) 0.5px,
+      transparent 0.7px
+    ),
+    radial-gradient(
+      circle at 70% 80%,
+      rgba(255, 255, 255, 0.5) 0.5px,
+      transparent 0.7px
+    );
+
+  background-size: 7px 7px, 11px 11px;
+
+  mix-blend-mode: soft-light;
+}
+
+
+/* =============================================================
+   MAIN CONTENT
+   ============================================================= */
 
 .ledger-app-shell > main {
+  position: relative;
+  z-index: 1;
+
   min-width: 0;
+  min-height: 100vh;
+
   overflow-x: hidden;
   overflow-y: auto;
+
+  background: transparent;
+}
+
+
+/*
+ * Used by the new AppShell.
+ */
+.ledger-main {
   position: relative;
-  background: #120e0b;
+  z-index: 2;
+
+  min-height: calc(100vh - 76px);
+
+  padding: 0;
 }
 
-/* Spine Sidebar */
-.ledger-sidebar {
-  background: linear-gradient(90deg, #0a0806 0%, #15100c 70%, #201812 100%);
-  border-right: 1px solid var(--color-binding-border);
-  box-shadow: 4px 0 15px rgba(0,0,0,0.6);
+.ledger-content {
+  position: relative;
+
+  width: 100%;
+  min-height: calc(100vh - 76px);
 }
 
-/* Gold Foil Headers */
-.gold-foil-title {
-  color: #f3e5c8;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.8), 0 0 10px rgba(212, 175, 55, 0.2);
+
+/* =============================================================
+   TOP NAVIGATION
+   ============================================================= */
+
+.ledger-topbar {
+  position: relative;
+  z-index: 20;
+
+  height: 76px;
+
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+
+  align-items: center;
+
+  padding: 0 42px;
+
+  border-bottom: 1px solid rgba(206, 166, 91, 0.17);
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(10, 9, 8, 0.88),
+      rgba(5, 5, 5, 0.66)
+    );
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
-/* Paper Stack Depth for Contractual Record */
-.paper-stack-effect {
+
+/* =============================================================
+   WORDMARK
+   ============================================================= */
+
+.ledger-brand {
+  display: inline-flex;
+  align-items: center;
+
+  justify-self: start;
+
+  color: #eee4d1;
+}
+
+.ledger-brand-wordmark {
+  font-family: var(--font-display);
+
+  font-size: 25px;
+  font-weight: 600;
+
+  letter-spacing: -0.035em;
+
+  text-transform: lowercase;
+
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.8),
+    0 0 22px rgba(220, 180, 92, 0.08);
+}
+
+
+/* =============================================================
+   PRIMARY NAV
+   ============================================================= */
+
+.ledger-topnav {
+  display: flex;
+  align-items: center;
+  gap: 34px;
+
+  height: 100%;
+}
+
+.ledger-topnav-item {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+
+  height: 100%;
+
+  color: #81796c;
+
+  font-size: 11px;
+  font-weight: 500;
+
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+
+  transition:
+    color 180ms ease,
+    opacity 180ms ease;
+}
+
+.ledger-topnav-item:hover {
+  color: #cfc2aa;
+}
+
+.ledger-topnav-item.is-active {
+  color: var(--color-gold-bright);
+}
+
+.ledger-topnav-label {
+  position: relative;
+
+  display: inline-flex;
+  align-items: center;
+
+  gap: 7px;
+}
+
+.ledger-nav-dot {
+  width: 4px;
+  height: 4px;
+
+  border-radius: 50%;
+
+  background: var(--color-gold-bright);
+
   box-shadow:
-    3px 0 0 #e4d8c3,
-    6px 0 0 #d8c9ae,
-    9px 0 0 #1c1714,
-    0 15px 40px rgba(0,0,0,0.5);
+    0 0 8px rgba(224, 189, 114, 0.65);
 }
 
-/* Bookmark Tab on Right Edge */
-.bookmark-tab {
-  padding: 8px 12px;
-  background: #ebdcc6;
-  border: 1px solid #c4b396;
-  border-left: none;
-  border-radius: 0 4px 4px 0;
+
+/* =============================================================
+   RIGHT NAV AREA
+   ============================================================= */
+
+.ledger-topbar-right {
+  justify-self: end;
+
+  display: flex;
+  align-items: center;
+
+  gap: 20px;
+}
+
+.ledger-location {
+  display: flex;
+  flex-direction: column;
+
+  gap: 1px;
+
+  color: #625b51;
+
+  font-family: var(--font-mono);
+
+  font-size: 8px;
+
+  line-height: 1.3;
+
+  letter-spacing: 0.08em;
+}
+
+.ledger-search {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 7px 10px;
+
+  color: #6d665d;
+
+  border: 1px solid rgba(194, 155, 82, 0.14);
+
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.ledger-search:hover {
+  color: #b8aa92;
+
+  border-color: rgba(194, 155, 82, 0.3);
+
+  background: rgba(194, 155, 82, 0.035);
+}
+
+.ledger-search span {
+  font-family: var(--font-mono);
+
+  font-size: 9px;
+
+  letter-spacing: 0.04em;
+}
+
+.ledger-user-mark {
+  width: 30px;
+  height: 30px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid rgba(210, 174, 99, 0.32);
+
+  border-radius: 50%;
+
+  color: var(--color-gold-pale);
+
+  font-family: var(--font-mono);
+  font-size: 8px;
+
+  background:
+    radial-gradient(
+      circle at 30% 25%,
+      rgba(224, 189, 114, 0.13),
+      rgba(8, 7, 6, 0.8) 70%
+    );
+
+  box-shadow:
+    inset 0 1px 3px rgba(255, 220, 150, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+
+/* =============================================================
+   EDITORIAL ANNOTATIONS
+   ============================================================= */
+
+.ledger-annotation {
+  position: fixed;
+
+  z-index: 3;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 3px;
+
+  color: rgba(189, 161, 111, 0.34);
+
+  font-family: var(--font-mono);
+
+  font-size: 7px;
+  line-height: 1.4;
+
+  letter-spacing: 0.16em;
+
+  pointer-events: none;
+}
+
+.ledger-annotation i {
+  display: block;
+
+  width: 22px;
+  height: 1px;
+
+  margin-top: 6px;
+
+  background: rgba(194, 155, 82, 0.25);
+}
+
+.ledger-annotation-left {
+  left: 18px;
+  top: 50%;
+
+  transform: translateY(-50%);
+
+  writing-mode: vertical-rl;
+}
+
+.ledger-annotation-bottom-left {
+  left: 42px;
+  bottom: 22px;
+}
+
+.ledger-annotation-bottom-right {
+  right: 42px;
+  bottom: 22px;
+
+  text-align: right;
+}
+
+
+/* =============================================================
+   EDITORIAL TITLES
+   ============================================================= */
+
+.gold-foil-title {
+  color: #e4d5b8;
+
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.8),
+    0 0 18px rgba(212, 175, 55, 0.08);
+}
+
+.ledger-display {
+  font-family: var(--font-display);
+
+  color: var(--color-gold-bright);
+
+  font-weight: 500;
+
+  letter-spacing: -0.045em;
+
+  line-height: 0.92;
+}
+
+.ledger-eyebrow {
+  color: var(--color-gold-pale);
+
+  font-family: var(--font-mono);
+
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 0.22em;
+
+  text-transform: uppercase;
+}
+
+
+/* =============================================================
+   INSTITUTIONAL RULES
+   ============================================================= */
+
+.ledger-rule {
+  width: 100%;
+  height: 1px;
+
+  background:
+    linear-gradient(
+      90deg,
+      rgba(209, 169, 92, 0.45),
+      rgba(209, 169, 92, 0.12),
+      transparent
+    );
+}
+
+.ledger-rule-center {
+  width: 100%;
+  height: 1px;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(209, 169, 92, 0.25),
+      transparent
+    );
+}
+
+
+/* =============================================================
+   BUTTONS
+   ============================================================= */
+
+.ledger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 38px;
+
+  padding: 0 18px;
+
+  border: 1px solid rgba(213, 174, 99, 0.38);
+
+  color: #dfc991;
+
   font-size: 11px;
   font-weight: 600;
-  color: #4a3e32;
-  box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
-  transition: transform 0.15s, background 0.15s;
+
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(201, 155, 70, 0.12),
+      rgba(201, 155, 70, 0.025)
+    );
+
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.ledger-button:hover {
+  border-color: rgba(224, 189, 114, 0.65);
+
+  color: #f0ddb1;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(201, 155, 70, 0.18),
+      rgba(201, 155, 70, 0.045)
+    );
+}
+
+.ledger-button:active {
+  transform: translateY(1px);
+}
+
+
+/* =============================================================
+   OLD COMPONENT COMPATIBILITY
+   ============================================================= */
+
+/*
+ * These are intentionally retained so existing pages don't break
+ * while we migrate them visually.
+ */
+
+.paper-stack-effect {
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(197, 156, 79, 0.09);
+}
+
+.bookmark-tab {
+  padding: 8px 12px;
+
+  background: rgba(180, 134, 55, 0.08);
+
+  border: 1px solid rgba(196, 154, 75, 0.25);
+
+  border-radius: 0;
+
+  font-size: 11px;
+  font-weight: 600;
+
+  color: var(--color-gold-pale);
+
+  box-shadow: none;
+
+  transition:
+    transform 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease;
 }
 
 .bookmark-tab:hover {
-  transform: translateX(4px);
-  background: #f4eee2;
+  transform: translateX(3px);
+
+  background: rgba(180, 134, 55, 0.13);
+
+  border-color: rgba(196, 154, 75, 0.4);
 }
 
-@media (max-width: 900px) {
-  .ledger-app-shell {
-    grid-template-columns: 1fr !important;
+
+/* =============================================================
+   RESPONSIVE
+   ============================================================= */
+
+@media (max-width: 1100px) {
+  .ledger-topbar {
+    grid-template-columns: 1fr auto;
+
+    padding: 0 28px;
+  }
+
+  .ledger-topnav {
+    display: none;
+  }
+
+  .ledger-topbar-right {
+    justify-self: end;
+  }
+
+  .ledger-location {
+    display: none;
+  }
+
+  .ledger-annotation-left {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .ledger-topbar {
+    height: 64px;
+
+    padding: 0 18px;
+  }
+
+  .ledger-brand-wordmark {
+    font-size: 22px;
+  }
+
+  .ledger-search span {
+    display: none;
+  }
+
+  .ledger-search {
+    padding: 7px;
+  }
+
+  .ledger-annotation-bottom-left,
+  .ledger-annotation-bottom-right {
+    display: none;
+  }
+
+  .ledger-main,
+  .ledger-content {
+    min-height: calc(100vh - 64px);
+  }
+}
+
+
+/* =============================================================
+   ACCESSIBILITY
+   ============================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }

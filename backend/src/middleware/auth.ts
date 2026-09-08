@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt, { JsonWebTokenError, TokenExpiredError, NotBeforeError } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
+const { JsonWebTokenError, TokenExpiredError, NotBeforeError } = jwt;
 import { config } from '../config.js';
 import { UnauthorizedError } from './errorHandler.js';
 

@@ -27,7 +27,7 @@ import { prisma } from '../db.js';
 import { dealRepository, type DealWithVersions } from '../repositories/DealRepository.js';
 import { simulatedPayment } from '../integrations/payment/SimulatedPayment.js';
 import type { PaymentProvider } from '../integrations/payment/PaymentProvider.js';
-import { InvalidStateError, UnauthorizedAccessError } from '../domain/errors/index.js';
+import { InvalidStateError, UnauthorizedAccessError, DealTermsValidationError } from '../domain/errors/index.js';
 import { ConflictError } from '../middleware/errorHandler.js';
 import type { Role } from '../types.js';
 import type { DealTerms } from '../domain/value-objects/DealTerms.js';
@@ -483,7 +483,11 @@ export class PaymentService {
   }
 
   private getPaymentAmountFromTerms(terms: DealTerms): number {
-    return terms.paymentAmount ?? 0;
+    const amount = terms.paymentAmount ?? 0;
+    if (amount <= 0) {
+      throw new DealTermsValidationError('Payment amount must be greater than zero');
+    }
+    return amount;
   }
 
   private getPaymentCurrencyFromTerms(terms: DealTerms): string {

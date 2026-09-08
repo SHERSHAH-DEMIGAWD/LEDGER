@@ -20,7 +20,7 @@ export const dealTermsSchema = z.object({
   paymentAmount: z
     .number()
     .int('Payment amount must be an integer (in cents)')
-    .min(0, 'Payment amount cannot be negative')
+    .min(1, 'Payment amount must be greater than zero')
     .max(1_000_000_00, 'Payment amount exceeds maximum allowed value'),
   currency: z.string().regex(/^[A-Z]{3}$/, 'Currency must be a valid 3-letter uppercase code (e.g., USD)'),
   timeline: z
