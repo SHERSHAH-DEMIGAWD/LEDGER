@@ -648,6 +648,13 @@ export function DealDetailPage() {
                   <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--color-ink-muted)', marginBottom: 2 }}>
                     NEXT ACTION
                   </div>
+                  {deal.fundingStatus && (
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-secondary)' }}>
+                      Funding: {deal.fundingStatus.replace(/_/g, ' ')} · Accepted amount: {deal.amountFormatted}
+                      {deal.paymentStatus === 'PENDING' && <div>Payment pending — funding is not yet confirmed.</div>}
+                      {deal.paymentId && <div>Payment: {deal.paymentStatus} · {deal.paymentId}</div>}
+                    </div>
+                  )}
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-secondary)' }}>
                     {statusConfig?.isTerminal
                       ? 'This record has reached a completed terminal state.'
@@ -666,6 +673,7 @@ export function DealDetailPage() {
                       variant={actionVariant(action)}
                       onClick={() => handleAction(action)}
                       loading={actionInFlight === action}
+                      disabled={actionInFlight !== null || (action === 'FUND' && deal.paymentStatus === 'PENDING')}
                       size="sm"
                     >
                       {ACTION_LABELS[action] ?? action} →

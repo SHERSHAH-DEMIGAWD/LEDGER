@@ -139,6 +139,11 @@ export function useDealActions(dealId: string | undefined): UseDealActionsResult
 
       const result = await dealApi.transitionDeal(dealId, action);
 
+      // Also reconcile after timeouts/conflicts: the server may have committed
+      // a payment even when the response did not reach this browser.
+      refetch();
+      refetchActions();
+
       if (!result.ok) {
         return {
           success: false,
@@ -146,10 +151,6 @@ export function useDealActions(dealId: string | undefined): UseDealActionsResult
           isConflict: result.kind === 'conflict',
         };
       }
-
-      // Success — refresh the deal record and available actions
-      refetch();
-      refetchActions();
 
       const label = ACTION_LABELS[action] ?? action;
       return {

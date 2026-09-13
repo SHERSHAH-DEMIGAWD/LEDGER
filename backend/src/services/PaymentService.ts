@@ -31,6 +31,7 @@ import { InvalidStateError, UnauthorizedAccessError, DealTermsValidationError } 
 import { ConflictError } from '../middleware/errorHandler.js';
 import type { Role } from '../types.js';
 import type { DealTerms } from '../domain/value-objects/DealTerms.js';
+import { validateTransition } from '../domain/state-machine/DealStateMachine.js';
 
 export interface PaymentActor {
   id: string;
@@ -53,6 +54,7 @@ export interface PaymentStatusResult {
   dealId: string;
   fundingStatus: 'NOT_FUNDED' | 'FUNDED' | 'REFUNDED';
   paymentId: string | null;
+  paymentStatus: string | null;
 }
 
 export class PaymentService {
@@ -92,6 +94,10 @@ export class PaymentService {
     // 2. Verify authorization
     this.verifyFundingAuthorization(deal, actor);
 
+    const targetStatus = validateTransition(deal.status, 'FUND', actor, {
+      isDealParticipant: { brandId: deal.brandId, creatorId: deal.creatorId },
+    });
+
     // 3. Verify deal is in ACCEPTED state
     if (deal.status !== 'ACCEPTED') {
       throw new InvalidStateError(
@@ -127,26 +133,26 @@ export class PaymentService {
     // this INSERT throws P2002 → we throw ConflictError (409) WITHOUT
     // ever calling the payment provider.
     //
-    // We also create the Payment row in the same transaction that
-    // updates Deal.fundingStatus and Deal.paymentId, so the two are
-    // always consistent. If the deal update fails (optimistic lock),
-    // the payment row is rolled back and we throw ConflictError.
+    // The claim bumps updatedAt but leaves ACCEPTED / NOT_FUNDED intact.
+    // Payment success and lifecycle advancement commit together in phase 2.
     // ------------------------------------------------------------------------
+    const claimedAt = new Date();
     let paymentRow: { id: string; intentId: string };
     try {
       paymentRow = await prisma.$transaction(async (tx) => {
         // Optimistic-lock update: only succeeds if the deal is still
-        // in ACCEPTED status and NOT_FUNDED. If a concurrent request
-        // already funded the deal, this updateMany affects 0 rows.
+        // in ACCEPTED status with the same terms snapshot. The unique Payment
+        // constraint remains the final guard against a second provider call.
         const dealResult = await tx.deal.updateMany({
           where: {
             id: dealId,
             fundingStatus: 'NOT_FUNDED',
             status: 'ACCEPTED',
+            updatedAt: deal.updatedAt,
           },
           data: {
-            fundingStatus: 'FUNDED',
-            updatedAt: new Date(),
+            // Claim without advertising funding before provider success.
+            updatedAt: claimedAt,
           },
         });
 
@@ -201,6 +207,7 @@ export class PaymentService {
     //   - Delete the DB row (so the user can retry)
     //   - Throw an error
     // ------------------------------------------------------------------------
+    let confirmed = false;
     try {
       const intent = await this.provider.createIdempotentIntent(
         intentId,
@@ -210,39 +217,51 @@ export class PaymentService {
       );
 
       const payment = await this.provider.confirm(intent.id);
+      if (payment.status !== 'SUCCEEDED') {
+        throw new Error('Payment did not succeed');
+      }
+      confirmed = true;
 
-      // Update the Payment row with the final paymentId and mark SUCCEEDED.
-      await prisma.payment.update({
-        where: { id: paymentRow.id },
-        data: {
-          paymentId: payment.id,
-          status: 'SUCCEEDED',
-        },
-      });
-
-      // Update the Deal.paymentRecordId for fast lookup
-      await prisma.deal.update({
-        where: { id: dealId },
-        data: { paymentRecordId: paymentRow.id },
-      });
-
-      // 7. Create audit event
-      await dealRepository.createAuditLog({
-        actorId: actor.id,
-        dealId,
-        action: 'PAYMENT.FUNDED',
-        resourceType: 'Payment',
-        resourceId: payment.id,
-        metadata: {
-          paymentId: payment.id,
-          paymentRecordId: paymentRow.id,
-          intentId: intent.id,
-          amount: intent.amount,
-          currency: intent.currency,
-          dealStatus: deal.status,
-          fromFundingStatus: 'NOT_FUNDED',
-          toFundingStatus: 'FUNDED',
-        },
+      // Commit payment success, lifecycle and audit together. If terms/state
+      // changed during the provider call, retain the claim for reconciliation.
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.deal.updateMany({
+          where: {
+            id: dealId, status: 'ACCEPTED', fundingStatus: 'NOT_FUNDED', updatedAt: claimedAt,
+          },
+          data: {
+            status: targetStatus, fundingStatus: 'FUNDED',
+            paymentRecordId: paymentRow.id, updatedAt: new Date(),
+          },
+        });
+        if (updated.count !== 1) {
+          throw new ConflictError('Deal changed while funding. Payment requires reconciliation.');
+        }
+        await tx.payment.update({
+          where: { id: paymentRow.id },
+          data: { paymentId: payment.id, status: 'SUCCEEDED' },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId: actor.id,
+            dealId,
+            action: 'PAYMENT.FUNDED',
+            resourceType: 'Payment',
+            resourceId: payment.id,
+            metadata: {
+              paymentId: payment.id,
+              paymentRecordId: paymentRow.id,
+              intentId: intent.id,
+              amount: intent.amount,
+              currency: intent.currency,
+              dealStatus: deal.status,
+              fromStatus: deal.status,
+              toStatus: targetStatus,
+              fromFundingStatus: 'NOT_FUNDED',
+              toFundingStatus: 'FUNDED',
+            },
+          },
+        });
       });
 
       return {
@@ -251,16 +270,16 @@ export class PaymentService {
         fundingStatus: 'FUNDED',
       };
     } catch (providerErr) {
+      // Never erase evidence or allow a second charge after confirmation.
+      if (confirmed) {
+        throw new ConflictError('Payment confirmed but funding could not be recorded. Reconciliation required; do not fund again.');
+      }
       // Provider call failed after we claimed the row.
-      // Compensate: delete the Payment row AND reset Deal.fundingStatus.
-      // We use a tx so the two are atomic.
+      // Remove only our pending claim. The deal has not advanced; do not
+      // overwrite any terms/state changes that occurred during the attempt.
       try {
         await prisma.$transaction(async (tx) => {
           await tx.payment.delete({ where: { id: paymentRow.id } });
-          await tx.deal.update({
-            where: { id: dealId },
-            data: { fundingStatus: 'NOT_FUNDED', updatedAt: new Date() },
-          });
         });
       } catch (compensateErr) {
         // If compensation fails, log loudly. The Payment row will be
@@ -414,21 +433,17 @@ export class PaymentService {
     // Verify the requester has access to this deal first
     const deal = await dealRepository.findByIdWithAccessCheck(dealId, requesterId, requesterRole);
 
-    // Resolve the actual paymentId from the Payment table.
-    // deal.paymentRecordId is the FK; we want the provider's paymentId for reconciliation.
-    let providerPaymentId: string | null = null;
-    if (deal.paymentRecordId) {
-      const paymentRow = await prisma.payment.findUnique({
-        where: { id: deal.paymentRecordId },
-        select: { paymentId: true },
-      });
-      providerPaymentId = paymentRow?.paymentId ?? null;
-    }
+    // The unique dealId also finds a pending claim before paymentRecordId is set.
+    const paymentRow = await prisma.payment.findUnique({
+      where: { dealId },
+      select: { paymentId: true, status: true, dealId: true },
+    });
 
     return {
       dealId: deal.id,
       fundingStatus: deal.fundingStatus,
-      paymentId: providerPaymentId,
+      paymentId: paymentRow?.status === 'PENDING' ? null : paymentRow?.paymentId ?? null,
+      paymentStatus: paymentRow?.dealId === dealId ? paymentRow.status : null,
     };
   }
 

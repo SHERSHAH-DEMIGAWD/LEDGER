@@ -188,6 +188,11 @@ export class DealRepository {
     // the timestamp we use for the optimistic lock.
     const existingDeal = await this.findByIdWithAccessCheck(dealId, requesterId, requesterRole);
 
+    if (newStatus === 'IN_PROGRESS' && !['FUNDED', 'RESOLVED'].includes(existingDeal.status)) {
+      const { InvalidStateError } = await import('../domain/errors/index.js');
+      throw new InvalidStateError('Work can only begin from FUNDED or resume from RESOLVED');
+    }
+
     // We require the caller to pass the same updatedAt we just observed.
     // If they don't, it's a programmer error and we use the freshly-read value.
     const expected =
@@ -200,6 +205,9 @@ export class DealRepository {
         where: {
           id: dealId,
           updatedAt: expected, // Optimistic lock
+          ...(newStatus === 'IN_PROGRESS'
+            ? { fundingStatus: 'FUNDED' as const, status: existingDeal.status }
+            : {}),
         },
         data: {
           status: newStatus,
@@ -214,6 +222,18 @@ export class DealRepository {
         throw new DealVersionConflictError(
           'Deal was modified by another request. Please reload and retry.',
         );
+      }
+
+      // The deal row is locked by the update above. Refunds acquire the same
+      // lock, so payment verification and starting work cannot race a refund.
+      if (newStatus === 'IN_PROGRESS') {
+        const payment = existingDeal.paymentRecordId
+          ? await tx.payment.findUnique({ where: { id: existingDeal.paymentRecordId } })
+          : null;
+        if (payment?.dealId !== dealId || payment.status !== 'SUCCEEDED') {
+          const { InvalidStateError } = await import('../domain/errors/index.js');
+          throw new InvalidStateError('Work requires a successfully funded payment record');
+        }
       }
 
       const deal = await tx.deal.findUnique({

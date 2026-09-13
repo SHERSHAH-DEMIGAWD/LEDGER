@@ -62,6 +62,7 @@ const mockPaymentDelete = vi.fn();
 const claimedDealIds = new Set<string>();
 
 const prismaTransactionMock = (fn: (tx: any) => any) => fn({
+  auditLog: { create: ({ data }: any) => mockCreateAuditLog(data) },
   deal: {
     updateMany: (...args: unknown[]) => mockDealUpdateMany(...args),
     update: (...args: unknown[]) => mockDealUpdate(...args),
@@ -408,7 +409,7 @@ describe('PaymentService.fundDeal', () => {
       expect(mockConfirm).toHaveBeenCalledWith('intent-1');
     });
 
-    it('compensates (deletes Payment row + resets fundingStatus) on provider failure', async () => {
+    it('deletes the pending claim without advancing funding or lifecycle on provider failure', async () => {
       const deal = makeAcceptedDeal();
       mockFindById.mockResolvedValue(deal);
       mockCreateIdempotentIntent.mockRejectedValue(new Error('Provider down'));
@@ -417,14 +418,11 @@ describe('PaymentService.fundDeal', () => {
         service.fundDeal('deal-1', { id: 'brand-1', role: 'BRAND' }),
       ).rejects.toThrow(ConflictError);
 
-      // Compensation was called: payment.delete + deal.update (reset to NOT_FUNDED)
       expect(mockPaymentDelete).toHaveBeenCalled();
-      expect(mockDealUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'deal-1' },
-          data: expect.objectContaining({ fundingStatus: 'NOT_FUNDED' }),
-        }),
-      );
+      expect(mockDealUpdate).not.toHaveBeenCalled();
+      expect(mockDealUpdateMany).toHaveBeenCalledTimes(1);
+      expect(mockDealUpdateMany.mock.calls[0][0].data).not.toHaveProperty('status');
+      expect(mockDealUpdateMany.mock.calls[0][0].data).not.toHaveProperty('fundingStatus');
     });
   });
 
@@ -437,10 +435,10 @@ describe('PaymentService.fundDeal', () => {
 
       await service.fundDeal('deal-1', { id: 'brand-1', role: 'BRAND' });
 
-      expect(mockDealUpdate).toHaveBeenCalledWith(
+      expect(mockDealUpdateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'deal-1' },
-          data: expect.objectContaining({ paymentRecordId: expect.any(String) }),
+          where: expect.objectContaining({ id: 'deal-1', status: 'ACCEPTED', fundingStatus: 'NOT_FUNDED' }),
+          data: expect.objectContaining({ paymentRecordId: expect.any(String), status: 'FUNDED', fundingStatus: 'FUNDED' }),
         }),
       );
     });
@@ -457,7 +455,7 @@ describe('PaymentService.fundDeal', () => {
       // The compensation deal.update sets NOT_FUNDED — but does NOT
       // set paymentRecordId. Check no call set paymentRecordId to
       // a non-null value.
-      const updateCalls = mockDealUpdate.mock.calls;
+      const updateCalls = mockDealUpdateMany.mock.calls;
       for (const call of updateCalls) {
         const data = (call[0] as any).data;
         if (data && 'paymentRecordId' in data) {

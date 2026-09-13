@@ -48,6 +48,9 @@ export interface Deal {
   amountFormatted: string;
   counterparties: string;
   status: DealStatus;
+  fundingStatus?: 'NOT_FUNDED' | 'FUNDED' | 'REFUNDED';
+  paymentId?: string | null;
+  paymentStatus?: string | null;
   description: string;
   parties: DealParty[];
   documents: DealDocument[];

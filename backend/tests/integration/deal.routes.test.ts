@@ -786,9 +786,10 @@ describe('Deal Routes — Full Happy-Path Lifecycle (mocked)', () => {
       .send({ action: 'ACCEPT' });
     expect(r3.status).toBe(200);
 
-    // 4. Fund (by brand)
-    const fundedDeal = { ...acceptedDeal, status: 'FUNDED' as DealStatus };
-    mockDealService.transitionDeal.mockResolvedValue(fundedDeal);
+    // 4. Generic funding is rejected. Dedicated funding is covered by
+    // funding.lifecycle.test.ts using the real services and repository.
+    const fundedDeal = { ...acceptedDeal, status: 'FUNDED' as DealStatus, fundingStatus: 'FUNDED' };
+    mockDealService.transitionDeal.mockRejectedValueOnce(new InvalidStateError('Funding must use POST /deals/:id/fund'));
     const r4 = await request(app)
       .post('/deals/deal-2/transition')
       .set(
@@ -796,7 +797,7 @@ describe('Deal Routes — Full Happy-Path Lifecycle (mocked)', () => {
         authHeader({ userId: 'brand-1', email: 'b@b.com', role: 'BRAND' }),
       )
       .send({ action: 'FUND' });
-    expect(r4.status).toBe(200);
+    expect(r4.status).toBe(400);
 
     // 5. Start (by creator)
     const inProgressDeal = { ...fundedDeal, status: 'IN_PROGRESS' as DealStatus };

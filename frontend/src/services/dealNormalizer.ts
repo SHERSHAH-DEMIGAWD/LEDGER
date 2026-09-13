@@ -39,7 +39,13 @@ import type { DealEvent } from '../types/deal';
  * Returns null if the deal has no versions (shouldn't happen in practice).
  */
 export function normalizeDeal(backendDeal: BackendDeal): Deal | null {
-  const latestVersion = backendDeal.versions[backendDeal.versions.length - 1];
+  if (['FUNDED', 'IN_PROGRESS'].includes(backendDeal.status) &&
+      (backendDeal.fundingStatus !== 'FUNDED' || !backendDeal.paymentRecordId)) {
+    throw new Error('Funding could not be verified for this deal. Reload or contact support.');
+  }
+  const latestVersion = backendDeal.acceptedVersionNumber != null
+    ? backendDeal.versions.find((v) => v.versionNumber === backendDeal.acceptedVersionNumber && !v.isPending)
+    : [...backendDeal.versions].reverse().find((v) => !v.isPending);
 
   if (!latestVersion) return null;
 
@@ -54,6 +60,7 @@ export function normalizeDeal(backendDeal: BackendDeal): Deal | null {
     amountFormatted,
     counterparties: buildCounterparties(backendDeal),
     status: backendDeal.status,
+    fundingStatus: backendDeal.fundingStatus,
     description: terms.description,
     parties: buildParties(backendDeal),
     documents: [], // Backend doesn't expose documents in this response
@@ -175,8 +182,8 @@ function formatCurrency(amount: number, currency: string): string {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency.toUpperCase(),
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   } catch {
     return `${currency.toUpperCase()} ${amount.toLocaleString()}`;

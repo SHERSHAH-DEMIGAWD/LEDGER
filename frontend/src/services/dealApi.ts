@@ -524,7 +524,7 @@ function mapAxiosError(err: AxiosError<unknown>): ApiCallError {
     return {
       ok: false,
       kind: 'conflict',
-      message: 'The deal was modified by another request. Please reload and try again.',
+      message: isBackendErrorResponse(body) ? body.error.message : 'The deal was modified by another request. Please reload and try again.',
       code: isBackendErrorResponse(body) ? body.error.code : undefined,
     };
   }
@@ -626,6 +626,23 @@ export const dealApi = {
 
     const normalized = normalizeDeal(data.data.deal);
     if (!normalized) throw new Error(`Deal "${id}" not found`);
+    const { data: payment } = await getHttpClient().get<{
+      data: { fundingStatus: 'NOT_FUNDED' | 'FUNDED' | 'REFUNDED'; paymentId: string | null; paymentStatus: string | null };
+    }>(`/deals/${id}/payment-status`);
+    // These requests can straddle a funding/refund commit. Never merge
+    // different funding snapshots into a seemingly authoritative deal view.
+    if (normalized.fundingStatus !== payment.data.fundingStatus ||
+        (payment.data.paymentStatus === 'SUCCEEDED' && payment.data.fundingStatus !== 'FUNDED') ||
+        (normalized.status === 'ACCEPTED' && payment.data.fundingStatus === 'FUNDED')) {
+      throw new Error('Funding changed while loading this deal. Please reload.');
+    }
+    normalized.fundingStatus = payment.data.fundingStatus;
+    normalized.paymentId = payment.data.paymentId;
+    normalized.paymentStatus = payment.data.paymentStatus;
+    if (['FUNDED', 'IN_PROGRESS'].includes(normalized.status) &&
+        (normalized.fundingStatus !== 'FUNDED' || !normalized.paymentId || normalized.paymentStatus !== 'SUCCEEDED')) {
+      throw new Error('Funding could not be verified for this deal. Reload or contact support.');
+    }
     return normalized;
   },
 
@@ -704,6 +721,10 @@ export const dealApi = {
     }
 
     try {
+      if (action === 'FUND') {
+        await getHttpClient().post(`/deals/${id}/fund`, {});
+        return { ok: true, data: await dealApi.getDeal(id) };
+      }
       const { data } = await getHttpClient().post<{
         success: boolean;
         data: { deal: BackendDeal };

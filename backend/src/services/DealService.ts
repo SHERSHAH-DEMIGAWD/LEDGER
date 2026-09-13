@@ -160,6 +160,18 @@ export async function transitionDeal(
     isDealParticipant: { brandId: deal.brandId, creatorId: deal.creatorId },
   });
 
+  if (action === 'FUND') {
+    throw new InvalidStateError('Funding must use POST /deals/:id/fund');
+  }
+  if (targetStatus === 'IN_PROGRESS') {
+    const payment = deal.paymentRecordId
+      ? await prisma.payment.findUnique({ where: { id: deal.paymentRecordId } })
+      : null;
+    if (deal.fundingStatus !== 'FUNDED' || payment?.dealId !== dealId || payment.status !== 'SUCCEEDED') {
+      throw new InvalidStateError('Work requires a successfully funded payment record');
+    }
+  }
+
   // 3. Update status in transaction (repo performs participant access check
   //    and optimistic locking based on the updatedAt we just observed).
   const updated = await dealRepository.updateStatus(

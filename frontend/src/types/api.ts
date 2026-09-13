@@ -85,6 +85,7 @@ export interface DealTerms {
 export interface DealVersion {
   id: string;
   versionNumber: number;
+  isPending?: boolean;
   terms: DealTerms;
   createdAt: string;
 }
@@ -102,6 +103,8 @@ export interface BackendDeal {
   brandId: string;
   creatorId: string | null;
   status: DealStatus;
+  acceptedVersionNumber?: number | null;
+  paymentRecordId?: string | null;
   contractId: string | null;
   fundingStatus: 'NOT_FUNDED' | 'FUNDED' | 'REFUNDED';
   createdAt: string;
