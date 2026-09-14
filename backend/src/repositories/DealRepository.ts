@@ -323,6 +323,7 @@ export class DealRepository {
     requesterId: string,
     requesterRole: string,
     revisionNote: string,
+    options: { expectedStatus?: DealStatus; auditLogs?: AuditLogInput[] } = {},
   ): Promise<DealWithVersions> {
     const existingDeal = await this.findByIdWithAccessCheck(dealId, requesterId, requesterRole);
     const expected =
@@ -335,6 +336,7 @@ export class DealRepository {
         where: {
           id: dealId,
           updatedAt: expected,
+          status: options.expectedStatus ?? existingDeal.status,
         },
         data: {
           status: newStatus,
@@ -367,6 +369,7 @@ export class DealRepository {
         throw new NotFoundError('Deal', dealId);
       }
 
+      for (const audit of options.auditLogs ?? []) await this.createAuditLog(audit, tx);
       return this.mapToDealWithVersions(deal);
     });
   }

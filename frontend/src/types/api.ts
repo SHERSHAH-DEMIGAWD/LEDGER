@@ -119,6 +119,9 @@ export interface BackendDeal {
   createdAt: string;
   updatedAt: string;
   versions: DealVersion[];
+  latestRevisionNote?: string | null;
+  latestRevisionNoteAuthorId?: string | null;
+  latestRevisionNoteAt?: string | null;
 }
 
 /**
@@ -175,6 +178,12 @@ export type InviteCreatorRequest =
 
 export interface TransitionDealRequest {
   action: DealAction;
+}
+
+/** Only notes supported by the dedicated delivery endpoints are sent. */
+export interface DealActionInput {
+  note?: string;
+  fromStatus?: DealStatus;
 }
 
 // ---------------------------------------------------------------------------

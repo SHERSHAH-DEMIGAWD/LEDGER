@@ -38,6 +38,8 @@ vi.mock('../../src/db.js', () => ({
 const mockFindById = vi.fn();
 const mockUpdateStatus = vi.fn();
 const mockUpdateStatusAndRevisionNote = vi.fn();
+const auditCalls = () => [...mockUpdateStatus.mock.calls, ...mockUpdateStatusAndRevisionNote.mock.calls]
+  .flatMap((args) => args.at(-1)?.auditLogs ?? []);
 const mockCreateAuditLog = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../src/repositories/DealRepository.js', () => ({
@@ -485,7 +487,7 @@ describe('Dispute Routes — Full Dispute Lifecycle', () => {
 
     expect(raiseRes.status).toBe(200);
     expect(raiseRes.body.data.status).toBe('DISPUTED');
-    expect(mockCreateAuditLog).toHaveBeenCalledWith(
+    expect(auditCalls()).toContainEqual(
       expect.objectContaining({
         action: 'DISPUTE.RAISED',
         metadata: expect.objectContaining({
@@ -517,6 +519,7 @@ describe('Dispute Routes — Full Dispute Lifecycle', () => {
       submittedDeal.updatedAt,
       BRAND_ID,
       'BRAND',
+      expect.objectContaining({ expectedStatus: 'SUBMITTED', auditLogs: expect.any(Array) }),
     );
     expect(mockUpdateStatusAndRevisionNote).toHaveBeenCalledWith(
       'deal-1',
@@ -525,14 +528,16 @@ describe('Dispute Routes — Full Dispute Lifecycle', () => {
       HRT_ID,
       'HRT',
       'After review: partial refund of 40% is fair to both parties',
+      expect.objectContaining({ expectedStatus: 'DISPUTED', auditLogs: expect.any(Array) }),
     );
 
     // Verify both audit logs were created
-    expect(mockCreateAuditLog).toHaveBeenCalledTimes(2);
-    expect(mockCreateAuditLog).toHaveBeenCalledWith(
+    expect(auditCalls()).toHaveLength(2);
+    expect(mockCreateAuditLog).not.toHaveBeenCalled();
+    expect(auditCalls()).toContainEqual(
       expect.objectContaining({ action: 'DISPUTE.RAISED' }),
     );
-    expect(mockCreateAuditLog).toHaveBeenCalledWith(
+    expect(auditCalls()).toContainEqual(
       expect.objectContaining({ action: 'DISPUTE.RESOLVED' }),
     );
   });

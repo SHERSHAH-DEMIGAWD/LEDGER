@@ -95,17 +95,15 @@ export class DisputeService {
 
     // 5. Persist the state change (with optimistic locking)
     const previousUpdatedAt = deal.updatedAt;
+    const raisedAt = new Date();
+    // State, supported notes and audit history commit or roll back together.
     await dealRepository.updateStatus(
       dealId,
       targetStatus,
       previousUpdatedAt,
       actor.id,
       actor.role,
-    );
-
-    // 6. Create audit event for dispute raised
-    const raisedAt = new Date();
-    await dealRepository.createAuditLog({
+      { expectedStatus: deal.status, auditLogs: [{
       actorId: actor.id,
       dealId,
       action: 'DISPUTE.RAISED',
@@ -117,7 +115,8 @@ export class DisputeService {
         action: 'RAISE_DISPUTE',
         disputeNote: note,
       },
-    });
+      }] },
+    );
 
     return {
       dealId,
@@ -176,6 +175,8 @@ export class DisputeService {
 
     // 5. Persist the state change with resolution note
     const previousUpdatedAt = deal.updatedAt;
+    const resolvedAt = new Date();
+    // State, supported notes and audit history commit or roll back together.
     await dealRepository.updateStatusAndRevisionNote(
       dealId,
       targetStatus,
@@ -183,11 +184,7 @@ export class DisputeService {
       actor.id,
       actor.role,
       resolutionNote,
-    );
-
-    // 6. Create audit event for dispute resolved
-    const resolvedAt = new Date();
-    await dealRepository.createAuditLog({
+      { expectedStatus: deal.status, auditLogs: [{
       actorId: actor.id,
       dealId,
       action: 'DISPUTE.RESOLVED',
@@ -199,7 +196,8 @@ export class DisputeService {
         action: 'RESOLVE',
         resolutionNote,
       },
-    });
+      }] },
+    );
 
     return {
       dealId,

@@ -25,7 +25,7 @@ import type { DealEvent } from '../types/deal';
  * Returns null if the deal has no versions (shouldn't happen in practice).
  */
 export function normalizeDeal(backendDeal: BackendDeal): Deal | null {
-  if (['FUNDED', 'IN_PROGRESS'].includes(backendDeal.status) &&
+  if (['FUNDED', 'IN_PROGRESS', 'SUBMITTED', 'REVISION_REQUESTED', 'APPROVED', 'DISPUTED', 'RESOLVED', 'COMPLETED'].includes(backendDeal.status) &&
       (backendDeal.fundingStatus !== 'FUNDED' || !backendDeal.paymentRecordId)) {
     throw new Error('Funding could not be verified for this deal. Reload or contact support.');
   }
@@ -54,6 +54,9 @@ export function normalizeDeal(backendDeal: BackendDeal): Deal | null {
     acceptedVersionNumber: backendDeal.acceptedVersionNumber ?? null,
     pendingTerms: pendingVersion?.terms,
     pendingTermsVersionNumber: pendingVersion?.versionNumber,
+    latestRevisionNote: backendDeal.latestRevisionNote,
+    latestRevisionNoteAuthorId: backendDeal.latestRevisionNoteAuthorId,
+    latestRevisionNoteAt: backendDeal.latestRevisionNoteAt,
     parties: buildParties(backendDeal),
     documents: [], // Backend doesn't expose documents in this response
     events: [],     // Populated separately by getDealHistory
@@ -94,6 +97,9 @@ export function normalizeHistoryEntry(entry: BackendDealHistoryEntry): DealEvent
     description: formatActionDescription(entry),
     actor: entry.actor?.name || entry.actor?.email || undefined,
     timestamp: new Date(entry.timestamp).toISOString(),
+    action: entry.action,
+    note: [entry.metadata?.note, entry.metadata?.revisionNote, entry.metadata?.disputeNote, entry.metadata?.resolutionNote]
+      .find((value): value is string => typeof value === 'string' && value.length > 0),
   };
 }
 
@@ -186,6 +192,15 @@ export function formatCurrency(amount: number, currency: string): string {
  * Format an action code like 'DEAL.STATE_CHANGED' into a readable label.
  */
 function formatActionLabel(action: string): string {
+  const deliveryLabels: Record<string, string> = {
+    'DELIVERABLE.SUBMITTED': 'Work submitted',
+    'DELIVERABLE.REVISION_REQUESTED': 'Revision requested',
+    'DELIVERABLE.APPROVED': 'Work approved',
+    'DISPUTE.RAISED': 'Dispute raised',
+    'DISPUTE.RESOLVED': 'Dispute resolved',
+    'PAYMENT.RELEASED': 'Deal completed (simulated release)',
+  };
+  if (deliveryLabels[action]) return deliveryLabels[action];
   // Strip the namespace prefix
   const label = action.replace(/^(DEAL|INVITATION)\./, '');
   // Convert SCREAMING_SNAKE to Title Case

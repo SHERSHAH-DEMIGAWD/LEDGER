@@ -21,6 +21,9 @@ import type { DealWithVersions } from '../../src/repositories/DealRepository.js'
 const mockCreateAuditLog = vi.fn();
 const mockUpdateStatus = vi.fn();
 const mockUpdateStatusAndRevisionNote = vi.fn();
+// Inspect events passed to the atomic repository write.
+const auditCalls = () => [...mockUpdateStatus.mock.calls, ...mockUpdateStatusAndRevisionNote.mock.calls]
+  .flatMap((args) => args.at(-1)?.auditLogs ?? []);
 
 vi.mock('../../src/repositories/DealRepository.js', () => ({
   dealRepository: {
@@ -201,7 +204,7 @@ describe('SubmissionService — submitDeliverable', () => {
 
       await service.submitDeliverable('deal-1', 'Final submission', creatorActor);
 
-      expect(mockCreateAuditLog).toHaveBeenCalledWith({
+      expect(auditCalls()).toContainEqual({
         actorId: 'creator-1',
         dealId: 'deal-1',
         action: 'DELIVERABLE.SUBMITTED',
@@ -223,7 +226,7 @@ describe('SubmissionService — submitDeliverable', () => {
 
       await service.submitDeliverable('deal-1', undefined, creatorActor);
 
-      expect(mockCreateAuditLog).toHaveBeenCalledWith(
+      expect(auditCalls()).toContainEqual(
         expect.objectContaining({
           metadata: expect.objectContaining({ note: null }),
         }),
@@ -328,7 +331,7 @@ describe('SubmissionService — requestRevision', () => {
 
       await service.requestRevision('deal-1', 'Please revise the opening', brandActor);
 
-      expect(mockCreateAuditLog).toHaveBeenCalledWith({
+      expect(auditCalls()).toContainEqual({
         actorId: 'brand-1',
         dealId: 'deal-1',
         action: 'DELIVERABLE.REVISION_REQUESTED',
@@ -441,7 +444,7 @@ describe('SubmissionService — approveDeliverable', () => {
 
       await service.approveDeliverable('deal-1', brandActor);
 
-      expect(mockCreateAuditLog).toHaveBeenCalledWith({
+      expect(auditCalls()).toContainEqual({
         actorId: 'brand-1',
         dealId: 'deal-1',
         action: 'DELIVERABLE.APPROVED',
@@ -553,7 +556,7 @@ describe('SubmissionService — releasePayment', () => {
 
       await service.releasePayment('deal-1', brandActor);
 
-      expect(mockCreateAuditLog).toHaveBeenCalledWith({
+      expect(auditCalls()).toContainEqual({
         actorId: 'brand-1',
         dealId: 'deal-1',
         action: 'PAYMENT.RELEASED',
@@ -640,7 +643,7 @@ describe('SubmissionService — Revision loop', () => {
 
     await service.requestRevision('deal-1', 'The logo needs to be bigger', brandActor);
 
-    expect(mockCreateAuditLog).toHaveBeenCalledWith(
+    expect(auditCalls()).toContainEqual(
       expect.objectContaining({
         action: 'DELIVERABLE.REVISION_REQUESTED',
         metadata: expect.objectContaining({
@@ -664,7 +667,7 @@ describe('SubmissionService — Revision loop', () => {
     await service.submitDeliverable('deal-1', 'Second version after revision', creatorActor);
 
     // Should have two separate submission events
-    const submissionCalls = mockCreateAuditLog.mock.calls.filter(
+    const submissionCalls = auditCalls().map((event) => [event]).filter(
       (call) => call[0]?.action === 'DELIVERABLE.SUBMITTED',
     );
     expect(submissionCalls).toHaveLength(2);

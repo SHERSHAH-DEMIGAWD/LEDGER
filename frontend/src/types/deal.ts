@@ -36,6 +36,8 @@ export interface DealEvent {
   description?: string;
   actor?: string;
   timestamp: string;
+  action?: string;
+  note?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,9 @@ export interface Deal {
   acceptedVersionNumber: number | null;
   pendingTerms?: DealTerms;
   pendingTermsVersionNumber?: number;
+  latestRevisionNote?: string | null;
+  latestRevisionNoteAuthorId?: string | null;
+  latestRevisionNoteAt?: string | null;
   parties: DealParty[];
   documents: DealDocument[];
   events: DealEvent[];

@@ -21,6 +21,9 @@ import type { DealWithVersions } from '../../src/repositories/DealRepository.js'
 const mockCreateAuditLog = vi.fn();
 const mockUpdateStatus = vi.fn();
 const mockUpdateStatusAndRevisionNote = vi.fn();
+// Inspect events passed to the atomic repository write.
+const auditCalls = () => [...mockUpdateStatus.mock.calls, ...mockUpdateStatusAndRevisionNote.mock.calls]
+  .flatMap((args) => args.at(-1)?.auditLogs ?? []);
 const mockFindById = vi.fn();
 
 vi.mock('../../src/repositories/DealRepository.js', () => ({
@@ -204,7 +207,7 @@ describe('DisputeService — raiseDispute', () => {
 
       await service.raiseDispute('deal-1', 'Deliverable quality is substandard', brandActor);
 
-      expect(mockCreateAuditLog).toHaveBeenCalledWith({
+      expect(auditCalls()).toContainEqual({
         actorId: 'brand-1',
         dealId: 'deal-1',
         action: 'DISPUTE.RAISED',
@@ -226,7 +229,7 @@ describe('DisputeService — raiseDispute', () => {
 
       await service.raiseDispute('deal-1', 'Admin dispute note', adminActor);
 
-      expect(mockCreateAuditLog).toHaveBeenCalledWith(
+      expect(auditCalls()).toContainEqual(
         expect.objectContaining({
           actorId: 'admin-1',
           metadata: expect.objectContaining({ disputeNote: 'Admin dispute note' }),
@@ -358,7 +361,7 @@ describe('DisputeService — resolveDispute', () => {
 
       await service.resolveDispute('deal-1', 'Partial refund of 30% recommended', hrtActor);
 
-      expect(mockCreateAuditLog).toHaveBeenCalledWith({
+      expect(auditCalls()).toContainEqual({
         actorId: 'hrt-1',
         dealId: 'deal-1',
         action: 'DISPUTE.RESOLVED',
@@ -380,7 +383,7 @@ describe('DisputeService — resolveDispute', () => {
 
       await service.resolveDispute('deal-1', 'Admin resolution note', adminActor);
 
-      expect(mockCreateAuditLog).toHaveBeenCalledWith(
+      expect(auditCalls()).toContainEqual(
         expect.objectContaining({
           actorId: 'admin-1',
           metadata: expect.objectContaining({ resolutionNote: 'Admin resolution note' }),
@@ -420,6 +423,7 @@ describe('DisputeService — resolveDispute', () => {
         'hrt-1',
         'HRT',
         'Brand to refund 50%',
+        expect.objectContaining({ expectedStatus: 'DISPUTED', auditLogs: expect.any(Array) }),
       );
     });
   });
@@ -468,7 +472,7 @@ describe('DisputeService — Dispute lifecycle', () => {
     mockUpdateStatusAndRevisionNote.mockResolvedValue({ ...disputedDeal, status: 'RESOLVED' });
     await service.resolveDispute('deal-1', 'Resolution applied', hrtActor);
 
-    const disputeCalls = mockCreateAuditLog.mock.calls.filter(
+    const disputeCalls = auditCalls().map((event) => [event]).filter(
       (call) => call[0]?.action?.startsWith('DISPUTE.'),
     );
     expect(disputeCalls).toHaveLength(2);

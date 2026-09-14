@@ -16,16 +16,12 @@
  *
  * State transitions:
  * - IN_PROGRESS + SUBMIT_DELIVERABLE → SUBMITTED  (creator)
- * - SUBMITTED + REQUEST_REVISION → IN_PROGRESS    (brand, with revision note)
+ * - SUBMITTED + REQUEST_REVISION → REVISION_REQUESTED    (brand, with revision note)
  * - SUBMITTED + APPROVE → APPROVED               (brand)
  * - APPROVED + RELEASE_PAYMENT → COMPLETED       (brand, via separate complete endpoint)
  *
- * Revision model: SUBMITTED → REVISION_REQUESTED → IN_PROGRESS
- *   The REVISION_REQUESTED state is the intermediate in the state machine.
- *   This service implements the "revision request" as a transition
- *   from SUBMITTED to IN_PROGRESS, with the revision note stored in
- *   the audit metadata. This simplifies the happy path while preserving
- *   the full audit trail and the ability to extend to a full review state later.
+ * Revision model: SUBMITTED → REVISION_REQUESTED → SUBMITTED.
+ * Resubmission uses the existing RESUBMIT transition.
  */
 
 import { dealRepository, type DealWithVersions } from '../repositories/DealRepository.js';
@@ -123,17 +119,15 @@ export class SubmissionService {
 
     // 6. Persist the state change (with optimistic locking)
     const previousUpdatedAt = deal.updatedAt;
+    const submittedAt = new Date();
+    // State, supported notes and audit history commit or roll back together.
     await dealRepository.updateStatus(
       dealId,
       targetStatus,
       previousUpdatedAt,
       actor.id,
       actor.role,
-    );
-
-    // 7. Create audit event for submission
-    const submittedAt = new Date();
-    await dealRepository.createAuditLog({
+      { expectedStatus: deal.status, auditLogs: [{
       actorId: actor.id,
       dealId,
       action: 'DELIVERABLE.SUBMITTED',
@@ -145,7 +139,8 @@ export class SubmissionService {
         action: 'SUBMIT_DELIVERABLE',
         note: note ?? null,
       },
-    });
+      }] },
+    );
 
     return {
       dealId,
@@ -165,7 +160,7 @@ export class SubmissionService {
    * State requirements:
    * - Deal must be in SUBMITTED status
    *
-   * This transitions the deal back to IN_PROGRESS with a revision note
+   * This transitions the deal to REVISION_REQUESTED with a revision note
    * in the audit trail. The revision note is preserved as metadata so
    * the creator knows what to address.
    *
@@ -204,6 +199,8 @@ export class SubmissionService {
 
     // 5. Persist the state change to REVISION_REQUESTED, recording the revision note
     const previousUpdatedAt = deal.updatedAt;
+    const revisionRequestedAt = new Date();
+    // State, supported notes and audit history commit or roll back together.
     await dealRepository.updateStatusAndRevisionNote(
       dealId,
       targetStatus,
@@ -211,11 +208,7 @@ export class SubmissionService {
       actor.id,
       actor.role,
       note,
-    );
-
-    // 6. Create audit event for revision request
-    const revisionRequestedAt = new Date();
-    await dealRepository.createAuditLog({
+      { expectedStatus: deal.status, auditLogs: [{
       actorId: actor.id,
       dealId,
       action: 'DELIVERABLE.REVISION_REQUESTED',
@@ -227,7 +220,8 @@ export class SubmissionService {
         action: 'REQUEST_REVISION',
         revisionNote: note,
       },
-    });
+      }] },
+    );
 
     return {
       dealId,
@@ -283,17 +277,15 @@ export class SubmissionService {
 
     // 5. Persist the state change
     const previousUpdatedAt = deal.updatedAt;
+    const approvedAt = new Date();
+    // State, supported notes and audit history commit or roll back together.
     await dealRepository.updateStatus(
       dealId,
       targetStatus,
       previousUpdatedAt,
       actor.id,
       actor.role,
-    );
-
-    // 6. Create audit event for approval
-    const approvedAt = new Date();
-    await dealRepository.createAuditLog({
+      { expectedStatus: deal.status, auditLogs: [{
       actorId: actor.id,
       dealId,
       action: 'DELIVERABLE.APPROVED',
@@ -304,7 +296,8 @@ export class SubmissionService {
         toStatus: targetStatus,
         action: 'APPROVE',
       },
-    });
+      }] },
+    );
 
     return {
       dealId,
@@ -356,17 +349,15 @@ export class SubmissionService {
 
     // 5. Persist the state change
     const previousUpdatedAt = deal.updatedAt;
+    const completedAt = new Date();
+    // State, supported notes and audit history commit or roll back together.
     await dealRepository.updateStatus(
       dealId,
       targetStatus,
       previousUpdatedAt,
       actor.id,
       actor.role,
-    );
-
-    // 6. Create audit event for completion
-    const completedAt = new Date();
-    await dealRepository.createAuditLog({
+      { expectedStatus: deal.status, auditLogs: [{
       actorId: actor.id,
       dealId,
       action: 'PAYMENT.RELEASED',
@@ -377,7 +368,8 @@ export class SubmissionService {
         toStatus: targetStatus,
         action: 'RELEASE_PAYMENT',
       },
-    });
+      }] },
+    );
 
     return {
       dealId,

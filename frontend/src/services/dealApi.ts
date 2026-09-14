@@ -3,7 +3,7 @@ import axios, { type AxiosError } from 'axios';
 import type { Deal, DealListResponse, DealSummary, DealEvent } from '../types/deal';
 import type {
   BackendDeal, BackendDealState, BackendDealHistoryEntry,
-  DealAction, DealTerms, InviteCreatorRequest,
+  DealAction, DealTerms, InviteCreatorRequest, DealActionInput,
 } from '../types/api';
 import type { DealStatus } from '../types/dealStates';
 import { normalizeDeal, normalizeDealSummary, normalizeHistoryEntry } from './dealNormalizer';
@@ -113,7 +113,7 @@ export const dealApi = {
     normalized.fundingStatus = payment.data.fundingStatus;
     normalized.paymentId = payment.data.paymentId;
     normalized.paymentStatus = payment.data.paymentStatus;
-    if (['FUNDED', 'IN_PROGRESS'].includes(normalized.status) &&
+    if (['FUNDED', 'IN_PROGRESS', 'SUBMITTED', 'REVISION_REQUESTED', 'APPROVED', 'DISPUTED', 'RESOLVED', 'COMPLETED'].includes(normalized.status) &&
         (normalized.fundingStatus !== 'FUNDED' || !normalized.paymentId || normalized.paymentStatus !== 'SUCCEEDED')) {
       throw new Error('Funding could not be verified for this deal. Reload or contact support.');
     }
@@ -131,10 +131,22 @@ export const dealApi = {
     }
   },
 
-  async transitionDeal(id: string, action: DealAction): Promise<ApiResult<Deal>> {
+  async transitionDeal(id: string, action: DealAction, input: DealActionInput = {}): Promise<ApiResult<Deal>> {
     try {
       const encodedId = encodeURIComponent(id);
-      if (action === 'FUND') {
+      const deliveryEndpoints: Partial<Record<DealAction, string>> = {
+        SUBMIT_DELIVERABLE: 'submit', REQUEST_REVISION: 'request-revision',
+        RESUBMIT: 'resubmit', APPROVE: 'approve', RELEASE_PAYMENT: 'complete',
+        RAISE_DISPUTE: 'dispute', RESOLVE: 'resolve',
+      };
+      const delivery = action in deliveryEndpoints || action === 'ACCEPT_RESOLUTION' || action === 'REQUEST_REWORK';
+      const endpoint = deliveryEndpoints[action];
+      // RESOLVED supports direct completion through the existing state-machine
+      // route; the dedicated /complete endpoint accepts APPROVED only.
+      if (endpoint && !(action === 'RELEASE_PAYMENT' && input.fromStatus === 'RESOLVED')) {
+        const supportsNote = ['SUBMIT_DELIVERABLE', 'REQUEST_REVISION', 'RAISE_DISPUTE', 'RESOLVE'].includes(action);
+        await getHttpClient().post(`/deals/${encodedId}/${endpoint}`, supportsNote && input.note !== undefined ? { note: input.note } : {});
+      } else if (action === 'FUND') {
         await getHttpClient().post(`/deals/${encodedId}/fund`, {});
       } else if (action === 'ACCEPT' || action === 'DECLINE') {
         await getHttpClient().post(`/invitations/${encodedId}/${action.toLowerCase()}`, {});
@@ -143,7 +155,18 @@ export const dealApi = {
       }
       // Re-read the current deal and verified payment snapshot after every
       // mutation, including an acceptance that may immediately be funded.
-      return { ok: true, data: await dealApi.getDeal(id) };
+      const deal = await dealApi.getDeal(id);
+      if (delivery) {
+        // Do not announce success using a torn deal/payment/action snapshot.
+        const state = await dealApi.getDealState(id);
+        if (!state.ok) return state;
+        if (state.data.dealId !== deal.id || state.data.status !== deal.status ||
+            new Date(state.data.updatedAt).getTime() !== new Date(deal.updatedAt).getTime() ||
+            (state.data.isTerminal && state.data.availableActions.length > 0)) {
+          throw new Error('The deal changed while verifying the update. Refresh status before continuing.');
+        }
+      }
+      return { ok: true, data: deal };
     } catch (err) {
       return failure(err, 'Unexpected error performing action.');
     }

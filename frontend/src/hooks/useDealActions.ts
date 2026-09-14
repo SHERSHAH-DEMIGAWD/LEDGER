@@ -14,7 +14,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { dealApi } from '../services/dealApi';
 import { useAuth } from '../contexts/AuthContext';
-import type { DealAction } from '../types/api';
+import type { DealAction, DealActionInput } from '../types/api';
 import type { Deal } from '../types/deal';
 import type { BackendDealState } from '../types/api';
 
@@ -51,7 +51,8 @@ export interface UseDealActionsResult {
    */
   performAction: (
     action: DealAction,
-    refetch: () => void
+    refetch: () => void,
+    input?: DealActionInput,
   ) => Promise<ActionResult>;
 }
 
@@ -66,7 +67,7 @@ export const ACTION_LABELS: Record<DealAction, string> = {
   DECLINE: 'Decline',
   FUND: 'Fund',
   START: 'Start Work',
-  SUBMIT_DELIVERABLE: 'Submit Deliverable',
+  SUBMIT_DELIVERABLE: 'Submit Work',
   APPROVE: 'Approve',
   REQUEST_REVISION: 'Request Revision',
   RESUBMIT: 'Resubmit',
@@ -74,7 +75,7 @@ export const ACTION_LABELS: Record<DealAction, string> = {
   RESOLVE: 'Resolve',
   ACCEPT_RESOLUTION: 'Accept Resolution',
   REQUEST_REWORK: 'Request Rework',
-  RELEASE_PAYMENT: 'Release Payment',
+  RELEASE_PAYMENT: 'Complete Deal',
   CANCEL: 'Cancel',
 };
 
@@ -151,12 +152,12 @@ export function useDealActions(
   }, [dealId, user?.id, user?.role, status, updatedAt, key, tick]);
 
   const performAction = useCallback(
-    async (action: DealAction, refetch: () => void): Promise<ActionResult> => {
+    async (action: DealAction, refetch: () => void, input: DealActionInput = {}): Promise<ActionResult> => {
       if (!dealId) {
         return { success: false, message: 'No deal selected.' };
       }
 
-      const result = await dealApi.transitionDeal(dealId, action);
+      const result = await dealApi.transitionDeal(dealId, action, { ...input, fromStatus: status });
 
       // Also reconcile after timeouts/conflicts: the server may have committed
       // a payment even when the response did not reach this browser.
@@ -178,7 +179,7 @@ export function useDealActions(
         updatedDeal: result.data,
       };
     },
-    [dealId, refetchActions]
+    [dealId, status, refetchActions]
   );
 
   // Hide another actor's or an older record's actions before effects run.

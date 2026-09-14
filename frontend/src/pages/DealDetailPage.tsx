@@ -31,6 +31,7 @@ import { useDealNavigation } from '../contexts/DealNavigationContext';
 import type { DealEvent } from '../types/deal';
 import type { DealAction } from '../types/api';
 import { DealEntryView } from '../components/DealEntryView';
+import { DealDeliveryView } from '../components/DealDeliveryView';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Toast {
@@ -39,6 +40,7 @@ interface Toast {
   kind: 'success' | 'error' | 'conflict';
 }
 
+const DELIVERY_STATUSES = ['IN_PROGRESS', 'SUBMITTED', 'REVISION_REQUESTED', 'APPROVED', 'DISPUTED', 'RESOLVED', 'COMPLETED'];
 const ENTRY_STATUSES = ['DRAFT', 'PENDING_ACCEPTANCE', 'ACCEPTED', 'DECLINED', 'CANCELLED'];
 
 function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) {
@@ -133,8 +135,11 @@ export function DealDetailPage() {
   const { recordNavigation } = useDealNavigation();
   const navigate = useNavigate();
 
-  const [historyEvents, setHistoryEvents] = useState<DealEvent[] | null>(null);
+  const [historySnapshot, setHistorySnapshot] = useState<{ key: string; events: DealEvent[] } | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyTick, setHistoryTick] = useState(0);
+  const historyKey = `${user?.id}:${id}:${deal?.updatedAt}:${historyTick}`;
+  const historyEvents = historySnapshot?.key === historyKey ? historySnapshot.events : null;
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -142,6 +147,7 @@ export function DealDetailPage() {
   const actionLock = useRef(false);
   const reduced = useReducedMotion();
   const isEntryRecord = !!deal && ENTRY_STATUSES.includes(deal.status);
+  const isDeliveryRecord = !!deal && DELIVERY_STATUSES.includes(deal.status);
 
   const currentIndex = id ? allDeals.findIndex((d) => d.id === id) : -1;
   const hasNext = currentIndex >= 0 && currentIndex < allDeals.length - 1;
@@ -168,7 +174,7 @@ export function DealDetailPage() {
 
   // Keyboard navigation
   useEffect(() => {
-    if (isEntryRecord) return;
+    if (isEntryRecord || isDeliveryRecord) return;
     function handleKey(e: KeyboardEvent) {
       if (modalOpen || drawerOpen) return;
       const target = e.target as HTMLElement | null;
@@ -191,11 +197,11 @@ export function DealDetailPage() {
     }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen, isEntryRecord]);
+  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen, isEntryRecord, isDeliveryRecord]);
 
   // Scoped Wheel Navigation
   useEffect(() => {
-    if (isEntryRecord) return;
+    if (isEntryRecord || isDeliveryRecord) return;
     let isThrottled = false;
 
     function handleWheel(e: WheelEvent) {
@@ -231,21 +237,23 @@ export function DealDetailPage() {
 
     window.addEventListener('wheel', handleWheel, { passive: true });
     return () => window.removeEventListener('wheel', handleWheel);
-  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen, isEntryRecord]);
+  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen, isEntryRecord, isDeliveryRecord]);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    setHistoryEvents(null);
+    setHistorySnapshot(null);
+    setHistoryError(null);
     async function loadHistory() {
       const result = await dealApi.getDealHistory(id as string);
-      if (!cancelled && result.ok) {
-        setHistoryEvents(result.data);
+      if (!cancelled) {
+        if (result.ok) setHistorySnapshot({ key: historyKey, events: result.data });
+        else setHistoryError(result.message);
       }
     }
     loadHistory();
     return () => { cancelled = true; };
-  }, [id, historyTick, user?.id, deal?.updatedAt]);
+  }, [id, historyKey]);
 
   const refreshRecord = () => {
     refetch();
@@ -259,19 +267,25 @@ export function DealDetailPage() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), 5000);
   };
 
-  const handleAction = async (action: DealAction) => {
-    if (actionLock.current || loadingActions || refreshing) return;
+  const handleAction = async (action: DealAction, note?: string): Promise<boolean> => {
+    if (actionLock.current || loadingActions || refreshing || actionsError || !availableActions.includes(action)) return false;
     actionLock.current = true;
     setActionInFlight(action);
     try {
-      const result = await performAction(action, refetch);
+      const result = await performAction(action, refetch, { note });
       if (result.success) {
         addToast(result.message, 'success');
         setHistoryTick((t) => t + 1);
       } else {
         addToast(result.message, result.isConflict ? 'conflict' : 'error');
       }
+      return result.success;
+    } catch {
+      addToast('The update could not be verified. Refresh status before trying again.', 'error');
+      return false;
     } finally {
+      refetch();
+      refetchActions();
       setHistoryTick((tick) => tick + 1);
       actionLock.current = false;
       setActionInFlight(null);
@@ -295,7 +309,14 @@ export function DealDetailPage() {
   if (isEntryRecord) {
     return <>
       <ToastContainer toasts={toasts} onDismiss={(toastId) => setToasts((items) => items.filter((item) => item.id !== toastId))} />
-      <DealEntryView key={deal.id} deal={deal} actions={availableActions} checkingActions={loadingActions || refreshing} actionsError={actionsError} actionInFlight={actionInFlight} events={historyEvents} onAction={handleAction} onRefresh={refreshRecord} onNotice={addToast} />
+      <DealEntryView key={deal.id} deal={deal} actions={availableActions} checkingActions={loadingActions || refreshing} actionsError={actionsError} actionInFlight={actionInFlight} events={historyEvents} onAction={async (action) => { await handleAction(action); }} onRefresh={refreshRecord} onNotice={addToast} />
+    </>;
+  }
+
+  if (isDeliveryRecord) {
+    return <>
+      <ToastContainer toasts={toasts} onDismiss={(toastId) => setToasts((items) => items.filter((item) => item.id !== toastId))} />
+      <DealDeliveryView key={deal.id} deal={deal} actions={availableActions} checkingActions={loadingActions || refreshing} actionsError={actionsError} actionInFlight={actionInFlight} events={historyEvents} historyError={historyError} onAction={handleAction} onRefresh={refreshRecord} />
     </>;
   }
 
