@@ -21,12 +21,16 @@ import {
   type TransitionActor,
 } from '../domain/state-machine/DealStateMachine.js';
 import { validateDealTerms, type DealTerms } from '../domain/value-objects/DealTerms.js';
-import { InvalidStateError } from '../domain/errors/index.js';
+import { InvalidStateError, UnauthorizedAccessError } from '../domain/errors/index.js';
 import { prisma } from '../db.js';
 import {
   dealRepository,
   type DealWithVersions,
   type DealFilter,
+  type AuditLogInput,
+  type DealParticipant,
+  participantSelect,
+  toDealParticipant,
 } from '../repositories/DealRepository.js';
 import type { Role } from '../types.js';
 
@@ -52,22 +56,15 @@ export async function createDeal(
     throw new InvalidStateError('Only brands can create deals');
   }
 
-  const deal = await dealRepository.create({
+  return dealRepository.create({
     brandId: actor.id,
     terms: terms as DealTerms,
-  });
-
-  // Audit log
-  await dealRepository.createAuditLog({
+  }, {
     actorId: actor.id,
-    dealId: deal.id,
     action: 'DEAL.CREATED',
     resourceType: 'Deal',
-    resourceId: deal.id,
-    metadata: { status: deal.status },
+    metadata: { status: 'DRAFT' },
   });
-
-  return deal;
 }
 
 /**
@@ -98,6 +95,7 @@ export async function getDealState(
   status: DealStatus;
   isTerminal: boolean;
   availableActions: DealAction[];
+  updatedAt: Date;
   brandId: string;
   creatorId: string | null;
 }> {
@@ -110,6 +108,7 @@ export async function getDealState(
     status: deal.status,
     isTerminal: isTerminal(deal.status),
     availableActions: transitions.map((t) => t.action),
+    updatedAt: deal.updatedAt,
     brandId: deal.brandId,
     creatorId: deal.creatorId,
   };
@@ -160,6 +159,9 @@ export async function transitionDeal(
     isDealParticipant: { brandId: deal.brandId, creatorId: deal.creatorId },
   });
 
+  if (action === 'SUBMIT_FOR_ACCEPTANCE') {
+    throw new InvalidStateError('Invitations must use POST /deals/:id/invite');
+  }
   if (action === 'FUND') {
     throw new InvalidStateError('Funding must use POST /deals/:id/fund');
   }
@@ -172,23 +174,7 @@ export async function transitionDeal(
     }
   }
 
-  // 3. Update status in transaction (repo performs participant access check
-  //    and optimistic locking based on the updatedAt we just observed).
-  const updated = await dealRepository.updateStatus(
-    dealId,
-    targetStatus,
-    deal.updatedAt,
-    actor.id,
-    actor.role,
-  );
-
-  // 4. Audit log
-  // FAILURE ISOLATION: this audit log entry is ONLY created after the
-  // successful validation above (steps 1-3). If any validation step throws
-  // (InvalidStateError, UnauthorizedAccessError, DealVersionConflictError),
-  // this line is never reached. Therefore, no misleading "successful" event
-  // is written for failed/invalid/unauthorized operations.
-  await dealRepository.createAuditLog({
+  const auditLogs: AuditLogInput[] = [{
     actorId: actor.id,
     dealId,
     action: 'DEAL.STATE_CHANGED',
@@ -199,9 +185,24 @@ export async function transitionDeal(
       toStatus: targetStatus,
       action,
     },
-  });
+  }];
+  // Keep the invitation event in the canonical service so both API paths
+  // produce the same history. Persist these events with the state change.
+  if (action === 'ACCEPT' || action === 'DECLINE') {
+    auditLogs.push({
+      actorId: actor.id,
+      dealId,
+      action: action === 'ACCEPT' ? 'INVITATION.ACCEPTED' : 'INVITATION.DECLINED',
+      resourceType: 'Invitation',
+      resourceId: dealId,
+      metadata: { fromStatus: deal.status, toStatus: targetStatus },
+    });
+  }
 
-  return updated;
+  return dealRepository.updateStatus(
+    dealId, targetStatus, deal.updatedAt, actor.id, actor.role,
+    { expectedStatus: deal.status, auditLogs },
+  );
 }
 
 /**
@@ -221,11 +222,11 @@ export async function transitionDeal(
  */
 export async function inviteCreator(
   dealId: string,
-  creatorId: string,
+  recipient: string | { creatorEmail: string },
   actor: TransitionActor,
 ): Promise<DealWithVersions> {
   if (actor.role !== 'BRAND' && actor.role !== 'ADMIN') {
-    throw new InvalidStateError('Only brands can invite creators to deals');
+    throw new UnauthorizedAccessError('Only brands can invite creators to deals');
   }
 
   // 1. Load deal
@@ -236,30 +237,35 @@ export async function inviteCreator(
 
   // 2. Brand ownership (admins bypass)
   if (actor.role !== 'ADMIN' && deal.brandId !== actor.id) {
-    throw new InvalidStateError('Only the deal brand can invite creators');
+    throw new UnauthorizedAccessError('Only the deal brand can invite creators');
   }
 
   // 3. Validate that the target creator exists and has the CREATOR role.
   //    Prevents inviting non-existent users or users with the wrong role.
-  const targetUser = await prisma.user.findUnique({
-    where: { id: creatorId },
-    select: { id: true, role: true },
-  });
-  if (!targetUser) {
-    throw new InvalidStateError(`Creator user '${creatorId}' not found`);
-  }
-  if (targetUser.role !== 'CREATOR') {
-    throw new InvalidStateError(
-      `User '${creatorId}' does not have CREATOR role and cannot be invited to deals`,
-    );
-  }
-
   // 4. Can only invite from DRAFT state
   if (deal.status !== 'DRAFT') {
     throw new InvalidStateError(
       `Cannot invite creator from state '${deal.status}'. Deal must be in DRAFT.`,
     );
   }
+
+  // This is an exact recipient address for an already-connected creator,
+  // never a discovery/search endpoint. Reject ambiguous legacy addresses.
+  const targetUsers = typeof recipient === 'string'
+    ? [await prisma.user.findUnique({
+        where: { id: recipient },
+        select: { id: true, role: true, deletedAt: true },
+      })].filter((user) => user !== null)
+    : await prisma.user.findMany({
+        where: { email: { equals: recipient.creatorEmail.trim(), mode: 'insensitive' } },
+        select: { id: true, role: true, deletedAt: true },
+        take: 2,
+      });
+  const targetUser = targetUsers.length === 1 ? targetUsers[0] : null;
+  if (!targetUser || targetUser.role !== 'CREATOR' || targetUser.deletedAt) {
+    throw new InvalidStateError('No active creator account matches this invitation. Check the creator’s registered email or ID.');
+  }
+  const creatorId = targetUser.id;
 
   // 5. Guard against re-inviting when a creator is already assigned.
   //    The state check above covers PENDING_ACCEPTANCE+, but a DRAFT deal
@@ -280,18 +286,10 @@ export async function inviteCreator(
     { isDealParticipant: { brandId: deal.brandId, creatorId } },
   );
 
-  // 5. Atomically assign creatorId + transition status in one transaction.
-  const updated = await dealRepository.assignCreatorAndTransition(
-    dealId,
-    creatorId,
-    targetStatus,
-    deal.updatedAt,
-    actor.id,
-    actor.role,
-  );
-
-  // 6. Audit log
-  await dealRepository.createAuditLog({
+  // Assignment, status and its audit event commit together.
+  return dealRepository.assignCreatorAndTransition(
+    dealId, creatorId, targetStatus, deal.updatedAt, actor.id, actor.role,
+    [{
     actorId: actor.id,
     dealId,
     action: 'DEAL.CREATOR_INVITED',
@@ -302,9 +300,8 @@ export async function inviteCreator(
       fromStatus: deal.status,
       toStatus: targetStatus,
     },
-  });
-
-  return updated;
+    }],
+  );
 }
 
 /**
@@ -328,6 +325,8 @@ export async function listCreatorInvitations(
   createdAt: Date;
   updatedAt: Date;
   brandId: string;
+  brand: DealParticipant | null;
+  creator: DealParticipant | null;
   terms: DealTerms;
   latestVersionNumber: number;
 }>> {
@@ -357,15 +356,20 @@ export async function listCreatorInvitations(
   });
 
   return pendingDeals.map((deal) => {
-    const latest = deal.versions[deal.versions.length - 1];
+    const authoritative = deal.acceptedVersionNumber !== null
+      ? deal.versions.find((version) => version.versionNumber === deal.acceptedVersionNumber && !version.isPending)
+      : [...deal.versions].reverse().find((version) => !version.isPending);
+    if (!authoritative) throw new InvalidStateError(`Deal '${deal.id}' has no authoritative terms version`);
     return {
       id: deal.id,
       status: deal.status,
       createdAt: deal.createdAt,
       updatedAt: deal.updatedAt,
       brandId: deal.brandId,
-      terms: latest?.terms ?? deal.versions[0].terms,
-      latestVersionNumber: latest?.versionNumber ?? 1,
+      brand: deal.brand ?? null,
+      creator: deal.creator ?? null,
+      terms: authoritative.terms,
+      latestVersionNumber: authoritative.versionNumber,
     };
   });
 }
@@ -383,6 +387,7 @@ export async function getDealHistory(
   id: string;
   action: string;
   actorId: string | null;
+  actor: DealParticipant | null;
   metadata: Record<string, unknown> | null;
   timestamp: Date;
   resourceType: string;
@@ -400,6 +405,7 @@ export async function getDealHistory(
       id: true,
       action: true,
       actorId: true,
+      actor: { select: participantSelect },
       metadata: true,
       timestamp: true,
       resourceType: true,
@@ -411,6 +417,7 @@ export async function getDealHistory(
     id: log.id,
     action: log.action,
     actorId: log.actorId,
+    actor: toDealParticipant(log.actor),
     metadata: log.metadata as Record<string, unknown> | null,
     timestamp: log.timestamp,
     resourceType: log.resourceType,

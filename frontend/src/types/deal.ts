@@ -7,6 +7,7 @@
  */
 
 import type { DealStatus } from './dealStates';
+import type { DealTerms } from './api';
 
 // ---------------------------------------------------------------------------
 // Sub-resources
@@ -52,6 +53,12 @@ export interface Deal {
   paymentId?: string | null;
   paymentStatus?: string | null;
   description: string;
+  /** Current authoritative terms; proposed terms never replace this snapshot. */
+  terms: DealTerms;
+  termsVersionNumber: number;
+  acceptedVersionNumber: number | null;
+  pendingTerms?: DealTerms;
+  pendingTermsVersionNumber?: number;
   parties: DealParty[];
   documents: DealDocument[];
   events: DealEvent[];

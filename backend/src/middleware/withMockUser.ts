@@ -15,6 +15,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import type { Role } from '../types.js';
+import { config } from '../config.js';
 
 declare global {
   namespace Express {
@@ -64,6 +65,7 @@ export function parseMockUserHeader(
  * `req.mockUser` will simply never be set.
  */
 export function withMockUser(_req: Request, _res: Response, next: NextFunction): void {
+  if (config.server.isProduction) return next();
   const mockUser = parseMockUserHeader(_req.headers['x-mock-user'] as string | undefined);
   if (mockUser) {
     _req.mockUser = mockUser;

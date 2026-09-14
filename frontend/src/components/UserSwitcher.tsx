@@ -54,9 +54,7 @@ export function UserSwitcher() {
     <div
       ref={containerRef}
       style={{
-        position: 'fixed',
-        top: 16,
-        right: 16,
+        position: 'relative',
         zIndex: 100,
       }}
     >

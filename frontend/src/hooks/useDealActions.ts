@@ -11,8 +11,9 @@
  * The page uses both hooks together.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { dealApi } from '../services/dealApi';
+import { useAuth } from '../contexts/AuthContext';
 import type { DealAction } from '../types/api';
 import type { Deal } from '../types/deal';
 import type { BackendDealState } from '../types/api';
@@ -42,6 +43,7 @@ export interface UseDealActionsResult {
   loadingActions: boolean;
   /** Error loading the available actions, if any. */
   actionsError: string | null;
+  refetchActions: () => void;
   /**
    * Perform a deal action.
    * Handles the API call and returns a structured result the page can toast.
@@ -87,19 +89,32 @@ export function actionVariant(action: DealAction): 'primary' | 'secondary' | 'da
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useDealActions(dealId: string | undefined): UseDealActionsResult {
-  const [state, setState] = useState<BackendDealState | null>(null);
-  const [loadingActions, setLoadingActions] = useState(false);
+export function useDealActions(
+  dealId: string | undefined,
+  status?: Deal['status'],
+  updatedAt?: string,
+): UseDealActionsResult {
+  const { user } = useAuth();
+  const key = `${user?.id}:${user?.role}:${dealId}:${status}:${updatedAt}`;
+  const [snapshot, setSnapshot] = useState<{ key: string; state: BackendDealState } | null>(null);
+  const [loadingActions, setLoadingActions] = useState(true);
   const [actionsError, setActionsError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const sequence = useRef(0);
 
-  // Refetch the available actions when the dealId changes or after a transition
-  const refetchActions = useCallback(() => setTick((t) => t + 1), []);
+  const refetchActions = useCallback(() => {
+    sequence.current += 1;
+    setSnapshot(null);
+    setLoadingActions(true);
+    setTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
-    if (!dealId) {
-      setState(null);
+    const request = ++sequence.current;
+    if (!dealId || !user) {
+      setSnapshot(null);
       setActionsError(null);
+      setLoadingActions(false);
       return;
     }
 
@@ -113,13 +128,17 @@ export function useDealActions(dealId: string | undefined): UseDealActionsResult
       setActionsError(null);
       const result = await dealApi.getDealState(dealIdValue);
 
-      if (cancelled) return;
+      if (cancelled || sequence.current !== request) return;
 
       if (!result.ok) {
         setActionsError(result.message);
-        setState(null);
+        setSnapshot(null);
+      } else if ((status && result.data.status !== status) ||
+          (updatedAt && new Date(result.data.updatedAt).getTime() !== new Date(updatedAt).getTime())) {
+        setSnapshot(null);
+        setActionsError('The deal changed while checking actions. Refresh status to review the current record.');
       } else {
-        setState(result.data);
+        setSnapshot({ key, state: result.data });
       }
 
       setLoadingActions(false);
@@ -129,7 +148,7 @@ export function useDealActions(dealId: string | undefined): UseDealActionsResult
     return () => {
       cancelled = true;
     };
-  }, [dealId, tick]);
+  }, [dealId, user?.id, user?.role, status, updatedAt, key, tick]);
 
   const performAction = useCallback(
     async (action: DealAction, refetch: () => void): Promise<ActionResult> => {
@@ -162,11 +181,14 @@ export function useDealActions(dealId: string | undefined): UseDealActionsResult
     [dealId, refetchActions]
   );
 
+  // Hide another actor's or an older record's actions before effects run.
+  const state = snapshot?.key === key ? snapshot.state : null;
   return {
-    availableActions: state?.availableActions ?? [],
+    availableActions: loadingActions ? [] : state?.availableActions ?? [],
     isTerminal: state?.isTerminal ?? false,
     loadingActions,
     actionsError,
     performAction,
+    refetchActions,
   };
 }

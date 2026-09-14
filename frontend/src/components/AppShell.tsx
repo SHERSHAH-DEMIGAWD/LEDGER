@@ -21,6 +21,8 @@ import { motion } from 'motion/react';
 import { useReducedMotion } from '../motion/hooks'; 
 import { duration } from '../motion/variants'; 
 import { MasterBackground } from './MasterBackground'; 
+import { UserSwitcher } from './UserSwitcher';
+import { useAuth } from '../contexts/AuthContext';
 
 interface NavItem { 
   to: string; 
@@ -30,11 +32,16 @@ interface NavItem {
 
 const NAV: NavItem[] = [ 
   { to: '/', label: 'Register', end: true }, 
-  { to: '/deals', label: 'Deals' }, 
+  { to: '/deals', label: 'Deals', end: true },
   { to: '/invitations', label: 'Invitations' }, 
 ] 
 
 export function AppShell({ children }: { children: ReactNode }) { 
+  const { user } = useAuth();
+  const navigation = NAV.filter((item) => item.to !== '/invitations' || user?.role === 'CREATOR');
+  if (user?.role === 'BRAND' || user?.role === 'ADMIN') {
+    navigation.push({ to: '/deals/new', label: 'Create Deal', end: true });
+  }
   return ( 
     <div className="ledger-app-shell"> 
       {/* Master Background Layer */}
@@ -52,29 +59,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         <NavBrand /> 
  
         <nav className="ledger-topnav" aria-label="Primary navigation"> 
-          {NAV.map((item) => ( 
+          {navigation.map((item) => (
             <TopNavItem key={item.to} item={item} /> 
           ))} 
         </nav> 
  
         <div className="ledger-topbar-right"> 
-          <div className="ledger-location"> 
-            <span>12.9716° N</span> 
-            <span>77.5946° E</span> 
-          </div> 
- 
-          <button 
-            type="button" 
-            className="ledger-search" 
-            aria-label="Search records" 
-          > 
-            <SearchIcon /> 
-            <span>Search records...</span> 
-          </button> 
- 
-          <div className="ledger-user-mark" aria-hidden="true"> 
-            <span>SK</span> 
-          </div> 
+          <UserSwitcher />
         </div> 
       </header> 
  
@@ -147,29 +138,3 @@ function TopNavItem({ item }: { item: NavItem }) {
     </NavLink> 
   ); 
 } 
-
-function SearchIcon() { 
-  return ( 
-    <svg 
-      width="16" 
-      height="16" 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      aria-hidden="true" 
-    > 
-      <circle 
-        cx="11" 
-        cy="11" 
-        r="6.5" 
-        stroke="currentColor" 
-        strokeWidth="1.3" 
-      /> 
-      <path 
-        d="M16 16L21 21" 
-        stroke="currentColor" 
-        strokeWidth="1.3" 
-        strokeLinecap="round" 
-      /> 
-    </svg> 
-  ); 
-}

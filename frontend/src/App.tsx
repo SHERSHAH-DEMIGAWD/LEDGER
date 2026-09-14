@@ -19,7 +19,9 @@ import { useReducedMotion } from './motion/hooks';
 import { duration, easing } from './motion/variants';
 import { AppShell } from './components/AppShell';
 import { AuthRoute } from './components/AuthRoute';
-import { UserSwitcher } from './components/UserSwitcher';
+import { useAuth } from './contexts/AuthContext';
+import { CreateDealPage } from './pages/CreateDealPage';
+import './styles/transaction.css';
 import {
   DealNavigationProvider,
   useDealNavigation,
@@ -103,13 +105,14 @@ function AnimatedRouteWrapper({ children }: { children: React.ReactNode }) {
 
 /** Wraps the main app shell with auth guard + persona switcher. */
 function ProtectedLayout() {
+  const { user } = useAuth();
   return (
     <AuthRoute>
       <AppShell>
-        <UserSwitcher />
-        <Routes>
+        <Routes key={`${user?.id}:${user?.role}`}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/deals" element={<DealsPage />} />
+          <Route path="/deals/new" element={<CreateDealPage />} />
           <Route path="/deals/:id" element={<DealDetailPage />} />
           <Route path="/invitations" element={<InvitationsPage />} />
         </Routes>

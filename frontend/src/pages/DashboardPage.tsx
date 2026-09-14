@@ -29,6 +29,7 @@ import type { DealSummary } from '../types/deal';
 const ACTIVE_STATUSES: DealStatus[] = [
   'DRAFT',
   'PENDING_ACCEPTANCE',
+  'ACCEPTED',
   'FUNDED',
   'IN_PROGRESS',
   'SUBMITTED',
@@ -58,10 +59,7 @@ export function DashboardPage() {
     .slice(0, 5);
 
   // Dynamic names from runtime data
-  const brandName = user?.name?.toUpperCase() || 'ACME STUDIOS';
-  const creatorName = deals.length > 0 && deals[0].counterparties
-    ? deals[0].counterparties.split('×')[1]?.trim()?.toUpperCase() || 'ALEX RIVERA'
-    : 'ALEX RIVERA';
+  const brandName = user?.name?.toUpperCase() || 'YOUR REGISTER';
 
   return (
     <div
@@ -188,10 +186,6 @@ export function DashboardPage() {
               }}
             >
               {brandName}
-              <span style={{ display: 'block', fontSize: '0.45em', color: 'var(--color-gold-bright)', margin: '6px 0', opacity: 0.75 }}>
-                ✕
-              </span>
-              {creatorName}
             </h1>
 
             <div
@@ -206,6 +200,11 @@ export function DashboardPage() {
               }}
             >
               RECORDS OF AGREEMENTS
+            </div>
+            <div className="transaction-actions" style={{ justifyContent: 'center' }}>
+              {(user?.role === 'BRAND' || user?.role === 'ADMIN')
+                ? <Link className="transaction-button transaction-button--primary" to="/deals/new">Create Deal →</Link>
+                : user?.role === 'CREATOR' && <Link className="transaction-button transaction-button--primary" to="/invitations">Review invitations →</Link>}
             </div>
 
             {/* Embossed Center Veritas Seal Stamp */}

@@ -23,7 +23,7 @@
 import type { Role } from '../config/seedUsers';
 
 const TOKEN_STORAGE_KEY = 'ledger.auth.token';
-const MOCK_USER_STORAGE_KEY = 'ledger.auth.mockUser';
+export const MOCK_USER_STORAGE_KEY = 'ledger.auth.mockUser';
 
 export interface MockUser {
   id: string;

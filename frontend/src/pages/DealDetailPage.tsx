@@ -13,7 +13,7 @@
  *   - Top Right Navigation: ▲ PREVIOUS | NEXT ▼
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Modal, Drawer } from '../motion/components';
@@ -30,12 +30,16 @@ import { getDealStateConfig } from '../types/dealStates';
 import { useDealNavigation } from '../contexts/DealNavigationContext';
 import type { DealEvent } from '../types/deal';
 import type { DealAction } from '../types/api';
+import { DealEntryView } from '../components/DealEntryView';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Toast {
   id: string;
   message: string;
   kind: 'success' | 'error' | 'conflict';
 }
+
+const ENTRY_STATUSES = ['DRAFT', 'PENDING_ACCEPTANCE', 'ACCEPTED', 'DECLINED', 'CANCELLED'];
 
 function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) {
   const kindStyles: Record<Toast['kind'], { border: string; accent: string }> = {
@@ -63,6 +67,8 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
           return (
             <motion.div
               key={toast.id}
+              role={toast.kind === 'success' ? 'status' : 'alert'}
+              aria-atomic="true"
               initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 40 }}
@@ -120,8 +126,9 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
 
 export function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { deal, loading, error, notFound, refetch } = useDeal(id);
-  const { availableActions, loadingActions, actionsError, performAction } = useDealActions(id);
+  const { deal, loading, refreshing, error, notFound, refetch } = useDeal(id);
+  const { availableActions, loadingActions, actionsError, performAction, refetchActions } = useDealActions(id, deal?.status, deal?.updatedAt);
+  const { user } = useAuth();
   const { deals: allDeals } = useDeals();
   const { recordNavigation } = useDealNavigation();
   const navigate = useNavigate();
@@ -132,7 +139,9 @@ export function DealDetailPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [actionInFlight, setActionInFlight] = useState<DealAction | null>(null);
+  const actionLock = useRef(false);
   const reduced = useReducedMotion();
+  const isEntryRecord = !!deal && ENTRY_STATUSES.includes(deal.status);
 
   const currentIndex = id ? allDeals.findIndex((d) => d.id === id) : -1;
   const hasNext = currentIndex >= 0 && currentIndex < allDeals.length - 1;
@@ -159,6 +168,7 @@ export function DealDetailPage() {
 
   // Keyboard navigation
   useEffect(() => {
+    if (isEntryRecord) return;
     function handleKey(e: KeyboardEvent) {
       if (modalOpen || drawerOpen) return;
       const target = e.target as HTMLElement | null;
@@ -181,10 +191,11 @@ export function DealDetailPage() {
     }
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen]);
+  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen, isEntryRecord]);
 
   // Scoped Wheel Navigation
   useEffect(() => {
+    if (isEntryRecord) return;
     let isThrottled = false;
 
     function handleWheel(e: WheelEvent) {
@@ -220,11 +231,12 @@ export function DealDetailPage() {
 
     window.addEventListener('wheel', handleWheel, { passive: true });
     return () => window.removeEventListener('wheel', handleWheel);
-  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen]);
+  }, [hasNext, hasPrev, goToNext, goToPrev, modalOpen, drawerOpen, isEntryRecord]);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
+    setHistoryEvents(null);
     async function loadHistory() {
       const result = await dealApi.getDealHistory(id as string);
       if (!cancelled && result.ok) {
@@ -233,7 +245,13 @@ export function DealDetailPage() {
     }
     loadHistory();
     return () => { cancelled = true; };
-  }, [id, historyTick]);
+  }, [id, historyTick, user?.id, deal?.updatedAt]);
+
+  const refreshRecord = () => {
+    refetch();
+    refetchActions();
+    setHistoryTick((tick) => tick + 1);
+  };
 
   const addToast = (message: string, kind: Toast['kind'] = 'success') => {
     const toastId = `toast-${Date.now()}`;
@@ -242,6 +260,8 @@ export function DealDetailPage() {
   };
 
   const handleAction = async (action: DealAction) => {
+    if (actionLock.current || loadingActions || refreshing) return;
+    actionLock.current = true;
     setActionInFlight(action);
     try {
       const result = await performAction(action, refetch);
@@ -252,6 +272,8 @@ export function DealDetailPage() {
         addToast(result.message, result.isConflict ? 'conflict' : 'error');
       }
     } finally {
+      setHistoryTick((tick) => tick + 1);
+      actionLock.current = false;
       setActionInFlight(null);
     }
   };
@@ -270,9 +292,16 @@ export function DealDetailPage() {
   if (loading) return <DealDetailSkeleton />;
   if (error || !deal) return <ErrorState message={error || 'Failed to load record'} onRetry={refetch} />;
 
+  if (isEntryRecord) {
+    return <>
+      <ToastContainer toasts={toasts} onDismiss={(toastId) => setToasts((items) => items.filter((item) => item.id !== toastId))} />
+      <DealEntryView key={deal.id} deal={deal} actions={availableActions} checkingActions={loadingActions || refreshing} actionsError={actionsError} actionInFlight={actionInFlight} events={historyEvents} onAction={handleAction} onRefresh={refreshRecord} onNotice={addToast} />
+    </>;
+  }
+
   const statusConfig = getDealStateConfig(deal.status);
-  const brandParty = deal.parties.find((p) => p.role.toLowerCase().includes('brand')) || deal.parties[0];
-  const creatorParty = deal.parties.find((p) => p.role.toLowerCase().includes('creator')) || deal.parties[1] || deal.parties[0];
+  const brandParty = deal.parties.find((p) => p.role.toLowerCase().includes('brand'));
+  const creatorParty = deal.parties.find((p) => p.role.toLowerCase().includes('creator'));
 
   const eventsToShow = historyEvents !== null ? historyEvents : deal.events;
   const formattedRecordNo = String(currentIndex >= 0 ? currentIndex + 1 : 1).padStart(3, '0');
@@ -673,7 +702,7 @@ export function DealDetailPage() {
                       variant={actionVariant(action)}
                       onClick={() => handleAction(action)}
                       loading={actionInFlight === action}
-                      disabled={actionInFlight !== null || (action === 'FUND' && deal.paymentStatus === 'PENDING')}
+                      disabled={loadingActions || actionInFlight !== null || (action === 'FUND' && deal.paymentStatus === 'PENDING')}
                       size="sm"
                     >
                       {ACTION_LABELS[action] ?? action} →

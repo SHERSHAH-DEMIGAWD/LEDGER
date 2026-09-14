@@ -29,6 +29,7 @@ import { DealStateBadge } from '../components/DealStateBadge';
 import { getDealStateConfig } from '../types/dealStates';
 import { useDealNavigation } from '../contexts/DealNavigationContext';
 import type { DealSummary } from '../types/deal';
+import { useAuth } from '../contexts/AuthContext';
 
 // ---------------------------------------------------------------------------
 // Filter definitions
@@ -53,6 +54,7 @@ const FILTERS: Filter[] = [
 // ---------------------------------------------------------------------------
 
 export function DealsPage() {
+  const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -124,6 +126,7 @@ export function DealsPage() {
         >
           Deal Records
         </h1>
+        {(user?.role === 'BRAND' || user?.role === 'ADMIN') && <div className="transaction-actions"><Link className="transaction-button transaction-button--primary" to="/deals/new">Create Deal →</Link></div>}
 
         {/* Top rule */}
         <div style={{ borderTop: '1px solid var(--color-border-strong)', marginTop: 'var(--space-5)' }} />

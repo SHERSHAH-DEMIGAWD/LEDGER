@@ -4,14 +4,13 @@
  * Data hook for the deals list page.
  * Handles loading, error, and empty states — the page only renders content.
  *
- * The hook accepts `status` and `search` filter options and forwards them
- * to the API client. When `VITE_USE_MOCK_DEALS=false`, the filters are
- * applied server-side. When mock mode is on, the API client applies them
- * locally on the mock dataset.
+ * Status filters are applied by the API; text search uses its returned records.
+ * Visible registers refresh so invitation responses reach the brand's view.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { dealApi } from '../services/dealApi';
+import { useAuth } from '../contexts/AuthContext';
 import type { DealSummary } from '../types/deal';
 import type { DealStatus } from '../types/dealStates';
 
@@ -20,7 +19,7 @@ export interface UseDealsOptions {
   fetchOnMount?: boolean;
   /** Server-side status filter. */
   status?: DealStatus;
-  /** Server-side free-text search. */
+  /** Text search over the returned records. */
   search?: string;
 }
 
@@ -36,39 +35,50 @@ export function useDeals(
   options: UseDealsOptions = {}
 ): UseDealsResult {
   const { fetchOnMount = true, status, search } = options;
+  const { user } = useAuth();
+  const key = JSON.stringify([user?.id, user?.role, status, search]);
 
-  const [deals, setDeals] = useState<DealSummary[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<{
+    key: string; deals: DealSummary[]; total: number; error: string | null;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
+  const sequence = useRef(0);
 
-  const refetch = useCallback(() => setTick((t) => t + 1), []);
+  const refetch = useCallback(() => {
+    sequence.current += 1;
+    setLoading(true);
+    setTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
-    if (!fetchOnMount) return;
+    const request = ++sequence.current;
+    if (!fetchOnMount || !user) {
+      setSnapshot(null);
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
 
     async function load() {
       setLoading(true);
-      setError(null);
       try {
         const result = await dealApi.listDeals({ status, search });
-        if (!cancelled) {
-          setDeals(result.deals);
-          setTotal(result.total);
+        if (!cancelled && sequence.current === request) {
+          setSnapshot({ key, ...result, error: null });
         }
       } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error
+        if (!cancelled && sequence.current === request) {
+          setSnapshot({
+            key, deals: [], total: 0,
+            error: err instanceof Error
               ? err.message
-              : 'Failed to load deals. Please try again.'
-          );
+              : 'Failed to load deals. Please try again.',
+          });
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && sequence.current === request) {
           setLoading(false);
         }
       }
@@ -78,16 +88,36 @@ export function useDeals(
     return () => {
       cancelled = true;
     };
-  }, [tick, fetchOnMount, status, search]);
+  }, [tick, fetchOnMount, status, search, user?.id, user?.role, key]);
 
-  return { deals, total, loading, error, refetch };
+  useEffect(() => {
+    if (!fetchOnMount || !user) return;
+    const refreshVisible = () => { if (document.visibilityState !== 'hidden') refetch(); };
+    window.addEventListener('focus', refreshVisible);
+    document.addEventListener('visibilitychange', refreshVisible);
+    const interval = window.setInterval(refreshVisible, 30_000);
+    return () => {
+      window.removeEventListener('focus', refreshVisible);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      window.clearInterval(interval);
+    };
+  }, [fetchOnMount, user?.id, user?.role, refetch]);
+
+  // Hide another account's data and obsolete filter results on the render
+  // that changes identity, before effects or outstanding requests finish.
+  const current = user && fetchOnMount && snapshot?.key === key ? snapshot : null;
+  return {
+    deals: current?.deals ?? [],
+    total: current?.total ?? 0,
+    loading: Boolean(user && fetchOnMount && (loading || !current)),
+    error: current?.error ?? null,
+    refetch,
+  };
 }
 
 /**
  * Filter helpers — used by pages for client-side filter chips on top of
- * server-filtered results. The hook now forwards the canonical status +
- * search to the backend, so this is mostly used for tab grouping on the
- * dashboard side.
+ * server-filtered results, including dashboard tab grouping.
  */
 export function filterDeals(
   deals: DealSummary[],
@@ -116,6 +146,7 @@ function matchesFilter(status: DealStatus, filter: string): boolean {
   const ACTIVE: DealStatus[] = [
     'DRAFT',
     'PENDING_ACCEPTANCE',
+    'ACCEPTED',
     'FUNDED',
     'IN_PROGRESS',
     'SUBMITTED',

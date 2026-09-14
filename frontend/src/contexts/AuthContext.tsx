@@ -31,6 +31,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   clearAuth as clearAuthStorage,
   getMockUser,
+  MOCK_USER_STORAGE_KEY,
   setAccessToken,
   setMockUser,
   type MockUser,
@@ -80,10 +81,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Initialize from localStorage so the persona survives a page refresh.
   const [user, setUser] = useState<MockUser | null>(() => getMockUser());
 
-  // Persist on every change.
+  // HTTP reads shared storage on each request. Keep the displayed account in
+  // sync when another tab changes it, so its records and actions refresh too.
+  // Writes stay in the explicit auth actions below; replaying them here would
+  // overwrite a newer account selected in another tab.
   useEffect(() => {
-    setMockUser(user);
-  }, [user]);
+    const syncAccount = (event: StorageEvent) => {
+      if (event.storageArea === window.localStorage &&
+          (event.key === MOCK_USER_STORAGE_KEY || event.key === null)) {
+        setUser(getMockUser());
+      }
+    };
+    window.addEventListener('storage', syncAccount);
+    return () => window.removeEventListener('storage', syncAccount);
+  }, []);
 
   const signIn = useCallback<AuthContextValue['signIn']>(
     (seedUser, options) => {
@@ -95,9 +106,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       };
       setUser(mockUser);
       setMockUser(mockUser);
-      if (options?.accessToken) {
-        setAccessToken(options.accessToken);
-      }
+      setAccessToken(options?.accessToken ?? null);
     },
     [],
   );
@@ -111,6 +120,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         role: seedUser.role,
       };
       setUser(mockUser);
+      setMockUser(mockUser);
+      setAccessToken(null);
     },
     [],
   );

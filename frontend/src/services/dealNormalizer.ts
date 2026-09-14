@@ -7,22 +7,8 @@
  * This is the ONLY translation layer. Pages and hooks never talk directly
  * to the raw backend shape — they always receive the normalized type.
  *
- * The conversion rules:
- *   Backend fields         →  Frontend fields
- *   deal.id              →  deal.id
- *   deal.versions[last]  →  deal.title (from terms.title)
- *   deal.versions[last]  →  deal.description (from terms.description)
- *   deal.versions[last]  →  deal.dealType (inferred from status / terms)
- *   deal.versions[last]  →  deal.amount (terms.paymentAmount / 100)
- *   deal.versions[last]  →  deal.amountFormatted (formatted from terms)
- *   deal.versions[last]  →  parties (derived from brandId + creatorId)
- *   deal.versions[last]  →  documents ([] — backend doesn't expose)
- *   []                  →  deal.events (populated from /history if available)
- *   deal.status          →  deal.status
- *   deal.createdAt       →  deal.createdAt
- *   deal.updatedAt       →  deal.updatedAt
- *
- * For list items (DealSummary), a subset of fields is populated.
+ * Terms follow the backend's accepted-version pointer. Pending proposals are
+ * exposed separately, and rejected versions never replace accepted terms.
  */
 
 import type { Deal, DealSummary, DealParty } from '../types/deal';
@@ -45,11 +31,12 @@ export function normalizeDeal(backendDeal: BackendDeal): Deal | null {
   }
   const latestVersion = backendDeal.acceptedVersionNumber != null
     ? backendDeal.versions.find((v) => v.versionNumber === backendDeal.acceptedVersionNumber && !v.isPending)
-    : [...backendDeal.versions].reverse().find((v) => !v.isPending);
+    : [...backendDeal.versions].sort((a, b) => b.versionNumber - a.versionNumber).find((v) => !v.isPending);
 
   if (!latestVersion) return null;
 
   const terms = latestVersion.terms;
+  const pendingVersion = backendDeal.versions.find((v) => v.isPending);
   const amount = terms.paymentAmount / 100; // cents → dollars
   const amountFormatted = formatCurrency(amount, terms.currency);
 
@@ -62,6 +49,11 @@ export function normalizeDeal(backendDeal: BackendDeal): Deal | null {
     status: backendDeal.status,
     fundingStatus: backendDeal.fundingStatus,
     description: terms.description,
+    terms,
+    termsVersionNumber: latestVersion.versionNumber,
+    acceptedVersionNumber: backendDeal.acceptedVersionNumber ?? null,
+    pendingTerms: pendingVersion?.terms,
+    pendingTermsVersionNumber: pendingVersion?.versionNumber,
     parties: buildParties(backendDeal),
     documents: [], // Backend doesn't expose documents in this response
     events: [],     // Populated separately by getDealHistory
@@ -100,7 +92,7 @@ export function normalizeHistoryEntry(entry: BackendDealHistoryEntry): DealEvent
     type: entry.action.toLowerCase().replace('.', '_'),
     label: formatActionLabel(entry.action),
     description: formatActionDescription(entry),
-    actor: entry.actorId ?? undefined,
+    actor: entry.actor?.name || entry.actor?.email || undefined,
     timestamp: new Date(entry.timestamp).toISOString(),
   };
 }
@@ -110,41 +102,41 @@ export function normalizeHistoryEntry(entry: BackendDealHistoryEntry): DealEvent
 // ---------------------------------------------------------------------------
 
 /**
- * Build a human-readable counterparties string from brandId + creatorId.
- * In production, you'd look up real names — here we use the IDs directly.
+ * Prefer the server's participant names; never use raw identifiers as names.
  */
 function buildCounterparties(deal: BackendDeal): string {
   const parts: string[] = [];
 
   if (deal.brandId) {
-    parts.push(`Brand ${deal.brandId.slice(0, 8)}…`);
+    parts.push(deal.brand?.name || deal.brand?.email || 'Brand');
   }
 
   if (deal.creatorId) {
-    parts.push(`Creator ${deal.creatorId.slice(0, 8)}…`);
+    parts.push(deal.creator?.name || deal.creator?.email || 'Creator');
   }
 
   return parts.join(' · ') || '—';
 }
 
 /**
- * Build Party records from brand + creator IDs.
- * In production these would be resolved to real names/emails.
+ * An unassigned creator is absent, rather than a fabricated counterparty.
  */
 function buildParties(deal: BackendDeal): DealParty[] {
   const parties: DealParty[] = [];
 
   parties.push({
     id: deal.brandId,
-    name: `Brand ${deal.brandId.slice(0, 8)}`,
+    name: deal.brand?.name || deal.brand?.email || 'Brand',
     role: 'Brand',
+    email: deal.brand?.email,
   });
 
   if (deal.creatorId) {
     parties.push({
       id: deal.creatorId,
-      name: `Creator ${deal.creatorId.slice(0, 8)}`,
+      name: deal.creator?.name || deal.creator?.email || 'Creator',
       role: 'Creator',
+      email: deal.creator?.email,
     });
   }
 
@@ -177,7 +169,7 @@ function inferDealType(status: DealStatus): string {
 /**
  * Format a numeric amount + currency code into a display string.
  */
-function formatCurrency(amount: number, currency: string): string {
+export function formatCurrency(amount: number, currency: string): string {
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',

@@ -82,7 +82,10 @@ export const transitionDealSchema = z.object({
 // ---------------------------------------------------------------------------------------
 
 export const inviteCreatorSchema = z.object({
-  creatorId: z.string().uuid('Invalid creator ID'),
+  creatorId: z.string().uuid('Invalid creator ID').optional(),
+  creatorEmail: z.string().trim().email('Enter a valid creator email').optional(),
+}).refine((input) => Boolean(input.creatorId) !== Boolean(input.creatorEmail), {
+  message: 'Provide exactly one creator ID or creator email',
 });
 
 // ---------------------------------------------------------------------------------------

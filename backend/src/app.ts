@@ -61,14 +61,15 @@ app.get('/health', (_req, res) => {
 });
 
 // Routes
-app.use('/auth', authRoutes);
-app.use('/users', userRoutes);
-app.use('/deals', dealRoutes);
-app.use('/deals', paymentRoutes);
-app.use('/deals', submissionRoutes);
-app.use('/deals', disputeRoutes);
-app.use('/invitations', invitationRoutes);
-app.use('/deals', termsRoutes);
+// Support both the existing root API and the frontend's /api proxy/login URL.
+app.use(['/auth', '/api/auth'], authRoutes);
+app.use(['/users', '/api/users'], userRoutes);
+app.use(['/deals', '/api/deals'], dealRoutes);
+app.use(['/deals', '/api/deals'], paymentRoutes);
+app.use(['/deals', '/api/deals'], submissionRoutes);
+app.use(['/deals', '/api/deals'], disputeRoutes);
+app.use(['/invitations', '/api/invitations'], invitationRoutes);
+app.use(['/deals', '/api/deals'], termsRoutes);
 
 // Error handling
 app.use(notFoundHandler);

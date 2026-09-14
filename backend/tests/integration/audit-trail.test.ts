@@ -46,10 +46,16 @@ vi.mock('../../src/db.js', () => ({
 const mockFindByIdWithAccessCheck = vi.fn();
 const mockCreateAuditLog = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('../../src/repositories/DealRepository.js', () => ({
+vi.mock('../../src/repositories/DealRepository.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/repositories/DealRepository.js')>(),
   dealRepository: {
     createAuditLog: (...args: any[]) => mockCreateAuditLog(...args),
     findByIdWithAccessCheck: (...args: any[]) => mockFindByIdWithAccessCheck(...args),
+    findById: (...args: any[]) => mockFindByIdWithAccessCheck(...args),
+    updateStatus: async (_id: string, status: string, _expected: Date, _actorId: string, _role: string, options: any) => {
+      for (const audit of options.auditLogs) await mockCreateAuditLog(audit);
+      return { ...PENDING_DEAL, status };
+    },
   },
 }));
 
@@ -60,6 +66,7 @@ const { errorHandler, notFoundHandler, NotFoundError } = await import(
   '../../src/middleware/errorHandler.js'
 );
 const dealServiceModule = await import('../../src/services/DealService.js');
+const realTransitionDeal = dealServiceModule.transitionDeal;
 
 import express, { type Application } from 'express';
 import request from 'supertest';
@@ -129,18 +136,6 @@ const DRAFT_DEAL = {
 const PENDING_DEAL = {
   ...DRAFT_DEAL,
   status: 'PENDING_ACCEPTANCE' as const,
-  creatorId: 'creator-1',
-};
-
-const ACCEPTED_DEAL = {
-  ...DRAFT_DEAL,
-  status: 'ACCEPTED' as const,
-  creatorId: 'creator-1',
-};
-
-const DECLINED_DEAL = {
-  ...DRAFT_DEAL,
-  status: 'DECLINED' as const,
   creatorId: 'creator-1',
 };
 
@@ -436,7 +431,7 @@ describe('Audit Trail — Invitation lifecycle events', () => {
   });
 
   it('accept invitation creates INVITATION.ACCEPTED audit log', async () => {
-    vi.spyOn(dealServiceModule, 'transitionDeal').mockResolvedValue(ACCEPTED_DEAL as any);
+    vi.spyOn(dealServiceModule, 'transitionDeal').mockImplementation(realTransitionDeal);
 
     const res = await request(app)
       .post('/invitations/deal-1/accept')
@@ -463,7 +458,7 @@ describe('Audit Trail — Invitation lifecycle events', () => {
   });
 
   it('decline invitation creates INVITATION.DECLINED audit log', async () => {
-    vi.spyOn(dealServiceModule, 'transitionDeal').mockResolvedValue(DECLINED_DEAL as any);
+    vi.spyOn(dealServiceModule, 'transitionDeal').mockImplementation(realTransitionDeal);
 
     const res = await request(app)
       .post('/invitations/deal-1/decline')

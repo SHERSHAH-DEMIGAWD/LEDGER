@@ -90,6 +90,13 @@ export interface DealVersion {
   createdAt: string;
 }
 
+/** Participant fields explicitly projected by the API (never account secrets). */
+export interface BackendParticipant {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
 /**
  * The full Deal record as returned by the backend.
  * Mirrors `DealWithVersions` on the server side.
@@ -102,6 +109,8 @@ export interface BackendDeal {
   id: string;
   brandId: string;
   creatorId: string | null;
+  brand?: BackendParticipant | null;
+  creator?: BackendParticipant | null;
   status: DealStatus;
   acceptedVersionNumber?: number | null;
   paymentRecordId?: string | null;
@@ -119,6 +128,7 @@ export interface BackendDeal {
 export interface BackendDealState {
   dealId: string;
   status: DealStatus;
+  updatedAt: string;
   isTerminal: boolean;
   availableActions: DealAction[];
   brandId: string;
@@ -133,6 +143,7 @@ export interface BackendDealHistoryEntry {
   id: string;
   action: string;
   actorId: string | null;
+  actor?: BackendParticipant | null;
   metadata: Record<string, unknown> | null;
   timestamp: string;
   resourceType: string;
@@ -149,6 +160,7 @@ export interface BackendInvitation {
   createdAt: string;
   updatedAt: string;
   brandId: string;
+  brand?: BackendParticipant | null;
   terms: DealTerms;
   latestVersionNumber: number;
 }
@@ -157,9 +169,9 @@ export interface BackendInvitation {
 // Request payloads
 // ---------------------------------------------------------------------------
 
-export interface InviteCreatorRequest {
-  creatorId: string;
-}
+export type InviteCreatorRequest =
+  | { creatorId: string; creatorEmail?: never }
+  | { creatorEmail: string; creatorId?: never };
 
 export interface TransitionDealRequest {
   action: DealAction;

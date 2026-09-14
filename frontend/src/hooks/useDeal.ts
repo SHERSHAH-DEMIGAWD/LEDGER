@@ -1,78 +1,73 @@
-/**
- * hooks/useDeal.ts
- *
- * Data hook for the deal detail page.
- * Handles loading, error, and not-found states — the page only renders content.
- */
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { dealApi } from '../services/dealApi';
+import { useAuth } from '../contexts/AuthContext';
 import type { Deal } from '../types/deal';
 
 export interface UseDealResult {
   deal: Deal | null;
   loading: boolean;
+  /** Refreshing a current view keeps its form mounted; actions must wait. */
+  refreshing: boolean;
   error: string | null;
-  /** True when loading is false and deal is null — the "not found" case. */
   notFound: boolean;
-  /** Reload the current deal. */
   refetch: () => void;
 }
 
 export function useDeal(id: string | undefined): UseDealResult {
-  const [deal, setDeal] = useState<Deal | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const key = `${user?.id}:${user?.role}:${id}`;
+  const [snapshot, setSnapshot] = useState<{ key: string; deal: Deal } | null>(null);
+  const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [tick, setTick] = useState(0);
+  const sequence = useRef(0);
+
+  const refetch = useCallback(() => {
+    sequence.current += 1;
+    setRefreshing(true);
+    setTick((value) => value + 1);
+  }, []);
 
   useEffect(() => {
-    if (!id) {
-      setDeal(null);
-      setLoading(false);
-      setError(null);
-      setNotFound(false);
+    const request = ++sequence.current;
+    let cancelled = false;
+    setError(null);
+    setNotFound(false);
+    if (!id || !user) {
+      setSnapshot(null);
+      setRefreshing(false);
       return;
     }
+    setRefreshing(true);
+    dealApi.getDeal(id).then((deal) => {
+      if (!cancelled && sequence.current === request) setSnapshot({ key, deal });
+    }).catch((err: unknown) => {
+      if (cancelled || sequence.current !== request) return;
+      setSnapshot(null);
+      const message = err instanceof Error ? err.message : 'Failed to load deal.';
+      if (message.includes('not found') || message.includes('404')) setNotFound(true);
+      else setError(message);
+    }).finally(() => {
+      if (!cancelled && sequence.current === request) setRefreshing(false);
+    });
+    return () => { cancelled = true; };
+  }, [id, user?.id, user?.role, key, tick]);
 
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      setNotFound(false);
-      try {
-        const result = await dealApi.getDeal(id!);
-        if (!cancelled) {
-          setDeal(result);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          const msg = err instanceof Error ? err.message : 'Failed to load deal.';
-          if (msg.includes('not found') || msg.includes('404')) {
-            setNotFound(true);
-          } else {
-            setError(msg);
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    load();
+  useEffect(() => {
+    const refreshVisible = () => { if (document.visibilityState !== 'hidden') refetch(); };
+    window.addEventListener('focus', refreshVisible);
+    document.addEventListener('visibilitychange', refreshVisible);
+    const interval = window.setInterval(refreshVisible, 30_000);
     return () => {
-      cancelled = true;
+      window.removeEventListener('focus', refreshVisible);
+      document.removeEventListener('visibilitychange', refreshVisible);
+      window.clearInterval(interval);
     };
-  }, [id, tick]);
+  }, [refetch]);
 
-  return {
-    deal,
-    loading,
-    error,
-    notFound,
-    refetch: () => setTick((t) => t + 1),
-  };
+  // Actor/deal changes hide the previous record in the first render, before
+  // effects run. Failed refreshes clear it rather than preserving stale state.
+  const deal = snapshot?.key === key ? snapshot.deal : null;
+  return { deal, loading: !deal && refreshing, refreshing, error, notFound, refetch };
 }

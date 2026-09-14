@@ -106,8 +106,8 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const { creatorId } = req.body;
-      const deal = await inviteCreator(id, creatorId, {
+      const { creatorId, creatorEmail } = req.body;
+      const deal = await inviteCreator(id, creatorId ?? { creatorEmail }, {
         id: req.user!.id,
         role: req.user!.role as 'BRAND' | 'CREATOR' | 'HRT' | 'ADMIN',
       });

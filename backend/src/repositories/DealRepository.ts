@@ -5,10 +5,45 @@ import { UnauthorizedAccessError } from '../domain/errors/index.js';
 import type { DealStatus, FundingStatus } from '../domain/state-machine/DealStateMachine.js';
 import type { DealTerms } from '../domain/value-objects/DealTerms.js';
 
+export const participantSelect = {
+  id: true,
+  email: true,
+  profile: { select: { name: true, company: true } },
+} satisfies Prisma.UserSelect;
+
+type ParticipantRow = Prisma.UserGetPayload<{ select: typeof participantSelect }>;
+
+export interface DealParticipant {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
+export function toDealParticipant(user: ParticipantRow | null | undefined): DealParticipant | null {
+  if (!user) return null;
+  return {
+    id: user.id,
+    name: user.profile?.name?.trim() || user.profile?.company?.trim() || null,
+    email: user.email,
+  };
+}
+
+export interface AuditLogInput {
+  actorId?: string;
+  dealId?: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  metadata?: Record<string, unknown>;
+  ipAddress?: string;
+}
+
 export interface DealWithVersions {
   id: string;
   brandId: string;
   creatorId: string | null;
+  brand?: DealParticipant | null;
+  creator?: DealParticipant | null;
   status: DealStatus;
   // acceptedVersionNumber tracks the currently authoritative DealVersion.
   // A value of null means no explicit acceptance (legacy state — use latest version).
@@ -63,7 +98,10 @@ export class DealRepository {
    * v1 is created as accepted (isPending=false) and the deal's
    * acceptedVersionNumber is set to 1, so v1 is the authoritative version.
    */
-  async create(input: CreateDealInput): Promise<DealWithVersions> {
+  async create(
+    input: CreateDealInput,
+    audit?: Omit<AuditLogInput, 'dealId' | 'resourceId'>,
+  ): Promise<DealWithVersions> {
     return prisma.$transaction(async (tx) => {
       const deal = await tx.deal.create({
         data: {
@@ -80,12 +118,17 @@ export class DealRepository {
           },
         },
         include: {
+          brand: { select: participantSelect },
+          creator: { select: participantSelect },
           versions: {
             orderBy: { versionNumber: 'asc' },
           },
         },
       });
 
+      if (audit) {
+        await this.createAuditLog({ ...audit, dealId: deal.id, resourceId: deal.id }, tx);
+      }
       return this.mapToDealWithVersions(deal);
     });
   }
@@ -98,6 +141,8 @@ export class DealRepository {
     const deal = await prisma.deal.findUnique({
       where: { id: dealId },
       include: {
+        brand: { select: participantSelect },
+        creator: { select: participantSelect },
         versions: {
           orderBy: { versionNumber: 'asc' },
         },
@@ -155,6 +200,8 @@ export class DealRepository {
         AND: [accessFilter, statusFilter],
       },
       include: {
+        brand: { select: participantSelect },
+        creator: { select: participantSelect },
         versions: {
           orderBy: { versionNumber: 'asc' },
         },
@@ -183,6 +230,7 @@ export class DealRepository {
     expectedUpdatedAt: Date,
     requesterId: string,
     requesterRole: string,
+    options: { expectedStatus?: DealStatus; auditLogs?: AuditLogInput[] } = {},
   ): Promise<DealWithVersions> {
     // First, load the deal to verify access; the returned row also gives us
     // the timestamp we use for the optimistic lock.
@@ -205,6 +253,7 @@ export class DealRepository {
         where: {
           id: dealId,
           updatedAt: expected, // Optimistic lock
+          status: options.expectedStatus ?? existingDeal.status,
           ...(newStatus === 'IN_PROGRESS'
             ? { fundingStatus: 'FUNDED' as const, status: existingDeal.status }
             : {}),
@@ -239,6 +288,8 @@ export class DealRepository {
       const deal = await tx.deal.findUnique({
         where: { id: dealId },
         include: {
+          brand: { select: participantSelect },
+          creator: { select: participantSelect },
           versions: {
             orderBy: { versionNumber: 'asc' },
           },
@@ -249,6 +300,7 @@ export class DealRepository {
         throw new NotFoundError('Deal', dealId);
       }
 
+      for (const audit of options.auditLogs ?? []) await this.createAuditLog(audit, tx);
       return this.mapToDealWithVersions(deal);
     });
   }
@@ -303,6 +355,8 @@ export class DealRepository {
       const deal = await tx.deal.findUnique({
         where: { id: dealId },
         include: {
+          brand: { select: participantSelect },
+          creator: { select: participantSelect },
           versions: {
             orderBy: { versionNumber: 'asc' },
           },
@@ -333,6 +387,7 @@ export class DealRepository {
     expectedUpdatedAt: Date,
     requesterId: string,
     requesterRole: string,
+    auditLogs: AuditLogInput[] = [],
   ): Promise<DealWithVersions> {
     const existingDeal = await this.findByIdWithAccessCheck(dealId, requesterId, requesterRole);
     const expected =
@@ -340,7 +395,12 @@ export class DealRepository {
 
     return prisma.$transaction(async (tx) => {
       const result = await tx.deal.updateMany({
-        where: { id: dealId, updatedAt: expected },
+        where: {
+          id: dealId,
+          updatedAt: expected,
+          status: 'DRAFT',
+          creatorId: existingDeal.creatorId,
+        },
         data: {
           creatorId,
           status: newStatus,
@@ -358,6 +418,8 @@ export class DealRepository {
       const deal = await tx.deal.findUnique({
         where: { id: dealId },
         include: {
+          brand: { select: participantSelect },
+          creator: { select: participantSelect },
           versions: {
             orderBy: { versionNumber: 'asc' },
           },
@@ -368,6 +430,7 @@ export class DealRepository {
         throw new NotFoundError('Deal', dealId);
       }
 
+      for (const audit of auditLogs) await this.createAuditLog(audit, tx);
       return this.mapToDealWithVersions(deal);
     });
   }
@@ -577,6 +640,8 @@ export class DealRepository {
       const deal = await tx.deal.findUnique({
         where: { id: dealId },
         include: {
+          brand: { select: participantSelect },
+          creator: { select: participantSelect },
           versions: { orderBy: { versionNumber: 'asc' } },
         },
       });
@@ -636,6 +701,8 @@ export class DealRepository {
       const deal = await tx.deal.findUnique({
         where: { id: dealId },
         include: {
+          brand: { select: participantSelect },
+          creator: { select: participantSelect },
           versions: { orderBy: { versionNumber: 'asc' } },
         },
       });
@@ -651,16 +718,8 @@ export class DealRepository {
   /**
    * Create an audit log entry.
    */
-  async createAuditLog(params: {
-    actorId?: string;
-    dealId?: string;
-    action: string;
-    resourceType: string;
-    resourceId: string;
-    metadata?: Record<string, unknown>;
-    ipAddress?: string;
-  }): Promise<void> {
-    await prisma.auditLog.create({
+  async createAuditLog(params: AuditLogInput, client: Prisma.TransactionClient = prisma): Promise<void> {
+    await client.auditLog.create({
       data: {
         actorId: params.actorId ?? null,
         dealId: params.dealId ?? null,
@@ -736,12 +795,16 @@ export class DealRepository {
   private mapToDealWithVersions(
     deal: Deal & {
       versions: DealVersion[];
+      brand?: ParticipantRow | null;
+      creator?: ParticipantRow | null;
     },
   ): DealWithVersions {
     return {
       id: deal.id,
       brandId: deal.brandId,
       creatorId: deal.creatorId,
+      brand: toDealParticipant(deal.brand),
+      creator: toDealParticipant(deal.creator),
       status: deal.status as DealStatus,
       acceptedVersionNumber: deal.acceptedVersionNumber,
       contractId: deal.contractId,

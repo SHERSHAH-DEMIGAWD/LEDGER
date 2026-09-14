@@ -1,7 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { mockAwareAuth } from '../middleware/mockAuth.js';
 import { listCreatorInvitations, transitionDeal } from '../services/DealService.js';
-import { dealRepository } from '../repositories/DealRepository.js';
 import type { DealAction } from '../domain/state-machine/DealStateMachine.js';
 
 const router = Router();
@@ -56,19 +55,6 @@ router.post(
         },
       );
 
-      // Create invitation-specific audit log for the lifecycle
-      await dealRepository.createAuditLog({
-        actorId: req.user!.id,
-        dealId: id,
-        action: 'INVITATION.ACCEPTED',
-        resourceType: 'Invitation',
-        resourceId: id,
-        metadata: {
-          fromStatus: 'PENDING_ACCEPTANCE',
-          toStatus: 'ACCEPTED',
-        },
-      });
-
       res.json({ success: true, data: { deal } });
     } catch (error) {
       next(error);
@@ -99,19 +85,6 @@ router.post(
           role: req.user!.role as 'BRAND' | 'CREATOR' | 'HRT' | 'ADMIN',
         },
       );
-
-      // Create invitation-specific audit log for the lifecycle
-      await dealRepository.createAuditLog({
-        actorId: req.user!.id,
-        dealId: id,
-        action: 'INVITATION.DECLINED',
-        resourceType: 'Invitation',
-        resourceId: id,
-        metadata: {
-          fromStatus: 'PENDING_ACCEPTANCE',
-          toStatus: 'DECLINED',
-        },
-      });
 
       res.json({ success: true, data: { deal } });
     } catch (error) {
