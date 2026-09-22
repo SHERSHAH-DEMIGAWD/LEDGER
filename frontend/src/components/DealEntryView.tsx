@@ -4,24 +4,27 @@ import { useAuth } from '../contexts/AuthContext';
 import { dealApi } from '../services/dealApi';
 import { DealStateBadge } from './DealStateBadge';
 import { DealTermsSummary } from './DealTermsSummary';
+import { DealTermsRefinement, type TermsRefinementProps } from './DealTermsRefinement';
+import { DealHistory } from './DealHistory';
 import { ACTION_LABELS } from '../hooks/useDealActions';
 import type { Deal, DealEvent } from '../types/deal';
 import type { DealAction } from '../types/api';
 
-interface Props {
+interface Props extends Pick<TermsRefinementProps, 'termsActionInFlight' | 'onTermsAction'> {
   deal: Deal;
   actions: DealAction[];
   checkingActions: boolean;
   actionsError: string | null;
   actionInFlight: DealAction | null;
   events: DealEvent[] | null;
-  onAction: (action: DealAction) => Promise<void>;
+  historyError: string | null;
+  onAction: (action: DealAction) => Promise<boolean>;
   onRefresh: () => void;
   onNotice: (message: string, kind: 'success' | 'error' | 'conflict') => void;
 }
 
 /** The invitation is the deal itself; every lifecycle value comes from the API. */
-export function DealEntryView({ deal, actions, checkingActions, actionsError, actionInFlight, events, onAction, onRefresh, onNotice }: Props) {
+export function DealEntryView({ deal, actions, checkingActions, actionsError, actionInFlight, events, historyError, onAction, onRefresh, onNotice, termsActionInFlight, onTermsAction }: Props) {
   const { user } = useAuth();
   const [email, setEmail] = useState('');
   const [inviting, setInviting] = useState(false);
@@ -34,11 +37,11 @@ export function DealEntryView({ deal, actions, checkingActions, actionsError, ac
   const brand = deal.parties.find((party) => party.role === 'Brand');
   const creator = deal.parties.find((party) => party.role === 'Creator');
   const canInvite = deal.status === 'DRAFT' && (user?.role === 'ADMIN' || (user?.role === 'BRAND' && user.id === brand?.id));
-  const busy = inviting || actionInFlight !== null || checkingActions;
+  const busy = inviting || actionInFlight !== null || checkingActions || !!actionsError;
 
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (inviteLock.current || busy) return;
+    if (inviteLock.current || busy || !canInvite) return;
     inviteLock.current = true;
     setInviting(true);
     try {
@@ -71,21 +74,23 @@ export function DealEntryView({ deal, actions, checkingActions, actionsError, ac
         : user?.role === 'CREATOR'
       ? 'Invitation accepted. The brand can now fund the deal. Work starts after funding is confirmed.'
       : 'Invitation accepted. Review the agreed terms, then fund this deal.',
+    FUNDED: 'Funding is confirmed. Review the agreed scope, then start work when you are ready.',
     DECLINED: 'The creator declined this invitation. This deal is closed and cannot be funded. A new agreement needs a new deal.',
     CANCELLED: 'This deal was cancelled. No further invitation or funding actions are available.',
   };
 
   return (
     <div className="transaction-page">
-      <Link className="transaction-link" to="/deals">← All deals</Link>
       <header className="transaction-header">
-        <p className="transaction-eyebrow">Agreement on record</p>
+        <Link className="transaction-back" to="/deals">← All deals</Link>
+        <p className="transaction-eyebrow">{deal.status === 'FUNDED' ? 'Funded agreement' : 'Agreement on record'}</p>
         <h1 className="transaction-title">{deal.title}</h1>
         <div className="transaction-actions">
           <DealStateBadge status={deal.status} />
           <button className="transaction-link" onClick={onRefresh} disabled={busy}>Refresh status</button>
         </div>
         <p className="transaction-intro" role="status">{guidance[deal.status]}</p>
+        <p className="transaction-note">Created <time dateTime={deal.createdAt}>{new Date(deal.createdAt).toLocaleDateString()}</time> · Updated <time dateTime={deal.updatedAt}>{new Date(deal.updatedAt).toLocaleString()}</time></p>
       </header>
 
       <section className="transaction-section" aria-label="Deal participants">
@@ -117,18 +122,17 @@ export function DealEntryView({ deal, actions, checkingActions, actionsError, ac
         <DealTermsSummary terms={deal.terms} />
       </section>
 
-      {deal.pendingTerms && (
-        <section className="transaction-section">
-          <h2>Proposed changes · Version {deal.pendingTermsVersionNumber}</h2>
-          <p className="transaction-note">Awaiting a separate terms response. These changes are not agreed terms. Funding remains unavailable while this proposal is pending.</p>
-          <DealTermsSummary terms={deal.pendingTerms} />
-        </section>
-      )}
+      <DealTermsRefinement key={`${deal.id}:${deal.termsVersionNumber}`} deal={deal} disabled={busy} termsActionInFlight={termsActionInFlight} onTermsAction={onTermsAction} />
 
       <section className="transaction-section" aria-label="Next action">
-        {deal.status === 'ACCEPTED' && <p className="transaction-note">Funding: {deal.fundingStatus?.replace(/_/g, ' ')} · Agreed amount: {deal.amountFormatted}{deal.paymentStatus === 'PENDING' ? ' · Payment awaiting confirmation' : ''}</p>}
+        {['ACCEPTED', 'FUNDED'].includes(deal.status) && <>
+          <h2>Funding &amp; next step</h2>
+          <p className="transaction-note">{deal.fundingStatus === 'FUNDED' ? 'Funding confirmed' : 'Awaiting funding'} · Agreed amount: {deal.amountFormatted}{deal.paymentStatus === 'PENDING' ? ' · Payment awaiting confirmation' : ''}</p>
+          <p className="transaction-note">Payments are simulated in this MVP. Funding records the payment status without charging real money.</p>
+        </>}
         {actionsError && <p className="transaction-error" role="alert">{actionsError} <button className="transaction-link" onClick={onRefresh}>Retry status check</button></p>}
         {checkingActions && <p className="transaction-note" role="status">Checking the latest actions…</p>}
+        {!checkingActions && !actionsError && actions.length === 0 && !['DECLINED', 'CANCELLED'].includes(deal.status) && <p className="transaction-note">No action is available for your account in the current state.</p>}
         <div className="transaction-actions">
           {actions.filter((action) => action !== 'SUBMIT_FOR_ACCEPTANCE' && !(action === 'FUND' && deal.pendingTerms)).map((action) => (
             <button key={action} type="button" className={`transaction-button ${['DECLINE', 'CANCEL'].includes(action) ? 'transaction-button--danger' : 'transaction-button--primary'}`} disabled={busy || (action === 'FUND' && deal.paymentStatus === 'PENDING')} aria-busy={actionInFlight === action} onClick={() => onAction(action)}>
@@ -142,11 +146,7 @@ export function DealEntryView({ deal, actions, checkingActions, actionsError, ac
 
       <section className="transaction-section" aria-labelledby="entry-history-heading">
         <h2 id="entry-history-heading">Record history</h2>
-        {events === null ? <p className="transaction-note">History is not available yet. Refresh to try again.</p> : (
-          <ol className="transaction-history">
-            {events.map((entry) => <li key={entry.id}><span>{entry.label}{entry.actor && ` · ${entry.actor}`}</span><small>{new Date(entry.timestamp).toLocaleString()}</small></li>)}
-          </ol>
-        )}
+        <DealHistory events={events} error={historyError} onRefresh={onRefresh} />
       </section>
     </div>
   );

@@ -5,9 +5,11 @@ import type { DealAction } from '../types/api';
 import { ACTION_LABELS } from '../hooks/useDealActions';
 import { DealStateBadge } from './DealStateBadge';
 import { DealTermsSummary } from './DealTermsSummary';
+import { DealTermsRefinement, type TermsRefinementProps } from './DealTermsRefinement';
+import { DealHistory } from './DealHistory';
 import '../styles/transaction.css';
 
-interface Props {
+interface Props extends Pick<TermsRefinementProps, 'termsActionInFlight' | 'onTermsAction'> {
   deal: Deal;
   actions: DealAction[];
   checkingActions: boolean;
@@ -37,13 +39,13 @@ const noteActions: Partial<Record<DealAction, { label: string; help: string; req
 };
 
 /** Workflow copy explains the state; only server-provided actions render controls. */
-export function DealDeliveryView({ deal, actions, checkingActions, actionsError, actionInFlight, events, historyError, onAction, onRefresh }: Props) {
+export function DealDeliveryView({ deal, actions, checkingActions, actionsError, actionInFlight, events, historyError, onAction, onRefresh, termsActionInFlight, onTermsAction }: Props) {
   const [selected, setSelected] = useState<DealAction | null>(null);
   const [notes, setNotes] = useState<Partial<Record<DealAction, string>>>({});
   const lock = useRef(false);
   const noteId = useId();
   const current = guidance[deal.status];
-  const busy = checkingActions || actionInFlight !== null || events === null || !!actionsError;
+  const busy = checkingActions || actionInFlight !== null || !!actionsError;
   const editor = selected && actions.includes(selected) ? noteActions[selected] : undefined;
 
   async function run(action: DealAction, note?: string) {
@@ -77,6 +79,7 @@ export function DealDeliveryView({ deal, actions, checkingActions, actionsError,
           <button className="transaction-link" disabled={checkingActions || actionInFlight !== null} onClick={onRefresh}>Refresh status</button>
         </div>
         <p className="transaction-intro">{current?.copy}</p>
+        <p className="transaction-note">Updated <time dateTime={deal.updatedAt}>{new Date(deal.updatedAt).toLocaleString()}</time></p>
       </header>
 
       <section className="transaction-section" aria-label="Current responsibility">
@@ -127,30 +130,16 @@ export function DealDeliveryView({ deal, actions, checkingActions, actionsError,
 
       <section className="transaction-section" aria-labelledby="delivery-record-heading">
         <h2 id="delivery-record-heading">Submission &amp; review record</h2>
-        {events === null ? (
-          <p className={historyError ? 'transaction-error' : 'transaction-note'} role={historyError ? 'alert' : 'status'}>
-            {historyError ?? 'Loading the recorded history…'}
-            {historyError && <><br /><button className="transaction-link" onClick={onRefresh}>Retry history and status</button></>}
-          </p>
-        ) : events.length === 0 ? <p className="transaction-note">No history entries were returned for this deal.</p> : (
-          <ol className="transaction-history">
-            {events.map((event) => <li key={event.id}>
-              <strong>{event.label}</strong>{event.actor && <span> · {event.actor}</span>}
-              {event.description && <p className="transaction-event-detail">{event.description}</p>}
-              {event.note && <p className="transaction-recorded-note">{event.note}</p>}
-              <small>{new Date(event.timestamp).toLocaleString()}</small>
-            </li>)}
-          </ol>
-        )}
+        <DealHistory events={events} error={historyError} onRefresh={onRefresh} />
       </section>
 
       <section className="transaction-section" aria-labelledby="delivery-terms-heading">
         <p className="transaction-eyebrow">Agreed terms · Version {deal.termsVersionNumber}</p>
         <h2 id="delivery-terms-heading">Scope &amp; payment</h2>
-        <p className="transaction-note">Funding: {deal.fundingStatus?.replace(/_/g, ' ')} · Payment record: {deal.paymentStatus} · {deal.amountFormatted}</p>
+        <p className="transaction-note">{deal.fundingStatus === 'FUNDED' ? 'Funding confirmed' : 'Funding not confirmed'} · {deal.amountFormatted}</p>
         <DealTermsSummary terms={deal.terms} />
-        {deal.pendingTerms && <p className="transaction-note">A separate terms proposal is pending. The agreed version above remains authoritative.</p>}
       </section>
+      <DealTermsRefinement key={`${deal.id}:${deal.termsVersionNumber}`} deal={deal} disabled={busy} termsActionInFlight={termsActionInFlight} onTermsAction={onTermsAction} />
     </div>
   );
 }

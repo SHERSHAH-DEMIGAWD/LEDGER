@@ -83,6 +83,7 @@ export interface DealSummary {
   id: string;
   title: string;
   amount: number;
+  currency?: string;
   amountFormatted: string;
   counterparties: string;
   status: DealStatus;

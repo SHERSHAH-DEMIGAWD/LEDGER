@@ -3,17 +3,9 @@
  *
  * Client-side authentication state.
  *
- * Two parallel concepts:
- *   1. `accessToken` — opaque bearer token, sent in the `Authorization` header.
- *      This is the real auth path. In mock mode it is unused.
- *   2. `mockUser` — a {id, role, email} object representing the currently
- *      signed-in persona. The frontend keeps it in localStorage and, when
- *      VITE_USE_MOCK_DEALS=false, forwards it to the backend in the
- *      `X-Mock-User: <role>:<id>` header.
- *
- * In mock mode (VITE_USE_MOCK_DEALS=true), only `mockUser` is used.
- * In real-backend mode, both may be used; the real JWT (if any) takes
- * precedence and the X-Mock-User header acts as a development shortcut.
+ * The account profile is cached for display; the server verifies credentials.
+ * A bearer token always takes precedence. Development personas require an
+ * explicit development-only opt-in and are never sent alongside a real token.
  *
  * IMPORTANT: The backend is always the source of truth. The frontend
  * never asserts "you are an admin" based on its own state — every API
@@ -22,8 +14,11 @@
 
 import type { Role } from '../config/seedUsers';
 
-const TOKEN_STORAGE_KEY = 'ledger.auth.token';
+export const TOKEN_STORAGE_KEY = 'ledger.auth.token';
 export const MOCK_USER_STORAGE_KEY = 'ledger.auth.mockUser';
+export const AUTH_EXPIRED_EVENT = 'ledger:auth-expired';
+export const DEV_PERSONAS_ENABLED = import.meta.env.DEV &&
+  import.meta.env.VITE_ENABLE_DEV_PERSONAS === 'true';
 
 export interface MockUser {
   id: string;
@@ -67,7 +62,15 @@ export function getMockUser(): MockUser | null {
   try {
     const raw = window.localStorage.getItem(MOCK_USER_STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as MockUser;
+    const user: unknown = JSON.parse(raw);
+    if (!user || typeof user !== 'object' || !('id' in user) ||
+        typeof user.id !== 'string' || !user.id || !('email' in user) ||
+        typeof user.email !== 'string' || !('name' in user) ||
+        typeof user.name !== 'string' || !('role' in user) ||
+        !['BRAND', 'CREATOR', 'HRT', 'ADMIN'].includes(String(user.role))) return null;
+    // A leftover development profile must never unlock a production session.
+    if (!getAccessToken() && !DEV_PERSONAS_ENABLED) return null;
+    return user as MockUser;
   } catch {
     return null;
   }
@@ -96,6 +99,7 @@ export function setMockUser(user: MockUser | null): void {
  * attach the header at all.
  */
 export function getMockUserHeader(): string | null {
+  if (!DEV_PERSONAS_ENABLED || getAccessToken()) return null;
   const u = getMockUser();
   if (!u) return null;
   return `${u.role}:${u.id}`;

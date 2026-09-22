@@ -78,6 +78,7 @@ export function normalizeDealSummary(backendDeal: BackendDeal): DealSummary | nu
     id: normalized.id,
     title: normalized.title,
     amount: normalized.amount,
+    currency: normalized.terms.currency,
     amountFormatted: normalized.amountFormatted,
     counterparties: normalized.counterparties,
     status: normalized.status,
@@ -193,6 +194,17 @@ export function formatCurrency(amount: number, currency: string): string {
  */
 function formatActionLabel(action: string): string {
   const deliveryLabels: Record<string, string> = {
+    'DEAL.CREATED': 'Deal created',
+    'DEAL.STATE_CHANGED': 'Deal status updated',
+    'DEAL.CREATOR_INVITED': 'Creator invited',
+    'DEAL.TERMS_PROPOSED': 'Revised terms proposed',
+    'DEAL.TERMS_ACCEPTED': 'Revised terms accepted',
+    'DEAL.TERMS_REJECTED': 'Revised terms declined',
+    'INVITATION.ACCEPTED': 'Invitation accepted',
+    'INVITATION.DECLINED': 'Invitation declined',
+    'INVITATION.VIEWED': 'Invitations reviewed',
+    'PAYMENT.FUNDED': 'Deal funded (simulated)',
+    'PAYMENT.REFUNDED': 'Funding refunded (simulated)',
     'DELIVERABLE.SUBMITTED': 'Work submitted',
     'DELIVERABLE.REVISION_REQUESTED': 'Revision requested',
     'DELIVERABLE.APPROVED': 'Work approved',
@@ -204,7 +216,7 @@ function formatActionLabel(action: string): string {
   // Strip the namespace prefix
   const label = action.replace(/^(DEAL|INVITATION)\./, '');
   // Convert SCREAMING_SNAKE to Title Case
-  return label.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return label.toLowerCase().replace(/[._]/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }
 
 /**
@@ -214,9 +226,21 @@ function formatActionDescription(entry: BackendDealHistoryEntry): string | undef
   const m = entry.metadata;
   if (!m) return undefined;
 
-  // State change events
-  if ('fromStatus' in m && 'toStatus' in m) {
-    return `${m.fromStatus} → ${m.toStatus}`;
+  const version = (key: string) => typeof m[key] === 'number' ? `Version ${m[key]}` : 'Revised terms';
+  if (entry.action === 'DEAL.TERMS_PROPOSED') {
+    return `${version('proposedVersionNumber')} awaits the creator's decision. Current terms remain active.`;
+  }
+  if (entry.action === 'DEAL.TERMS_ACCEPTED') {
+    return `${version('acceptedVersionNumber')} is now the agreed set of terms.`;
+  }
+  if (entry.action === 'DEAL.TERMS_REJECTED') {
+    return `${version('rejectedVersionNumber')} was declined. Previously agreed terms remain active.`;
+  }
+
+  // Translate lifecycle codes without exposing raw metadata or identifiers.
+  if (typeof m.fromStatus === 'string' && typeof m.toStatus === 'string') {
+    const label = (value: string) => value.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+    return `${label(m.fromStatus)} → ${label(m.toStatus)}`;
   }
 
   // Creator invitation

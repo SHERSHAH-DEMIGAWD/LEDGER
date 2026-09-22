@@ -20,7 +20,6 @@ import { NavLink } from 'react-router-dom';
 import { motion } from 'motion/react'; 
 import { useReducedMotion } from '../motion/hooks'; 
 import { duration } from '../motion/variants'; 
-import { MasterBackground } from './MasterBackground'; 
 import { UserSwitcher } from './UserSwitcher';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -31,7 +30,7 @@ interface NavItem {
 } 
 
 const NAV: NavItem[] = [ 
-  { to: '/', label: 'Register', end: true }, 
+  { to: '/', label: 'Overview', end: true },
   { to: '/deals', label: 'Deals', end: true },
   { to: '/invitations', label: 'Invitations' }, 
 ] 
@@ -44,15 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
   return ( 
     <div className="ledger-app-shell"> 
-      {/* Master Background Layer */}
-      <MasterBackground /> 
-      
-      {/* Atmospheric lighting layer */}
-      <div className="ledger-atmosphere" aria-hidden="true"> 
-        <div className="ledger-light-beam" /> 
-        <div className="ledger-light-haze" /> 
-        <div className="ledger-grain" /> 
-      </div> 
+      <a className="ledger-skip-link" href="#main-content">Skip to content</a>
  
       {/* Global navigation */}
       <header className="ledger-topbar"> 
@@ -70,7 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header> 
  
       {/* Page content */}
-      <main className="ledger-main"> 
+      <main id="main-content" className="ledger-main" tabIndex={-1}>
         <div className="ledger-content">{children}</div> 
       </main> 
  
@@ -107,7 +98,7 @@ function NavBrand() {
     <NavLink 
       to="/" 
       className="ledger-brand" 
-      aria-label="Ledger — Register" 
+      aria-label="Ledger — Overview"
     > 
       <span className="ledger-brand-wordmark">ledger</span> 
     </NavLink> 

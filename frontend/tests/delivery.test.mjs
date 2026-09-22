@@ -130,3 +130,15 @@ test('normalizer preserves backend revision fields and all supported audit note 
     assert.equal(event.actor, 'Creator');
   }
 });
+
+test('history presents readable lifecycle and terms-version decisions without raw metadata', async () => {
+  const h = await harness();
+  const entry = { id: 'event', actorId: 'brand', actor: h.deal.brand, timestamp: h.deal.updatedAt };
+  const state = h.normalizer.normalizeHistoryEntry({ ...entry, action: 'DEAL.STATE_CHANGED', metadata: { fromStatus: 'IN_PROGRESS', toStatus: 'SUBMITTED' } });
+  assert.equal(state.label, 'Deal status updated');
+  assert.equal(state.description, 'In progress → Submitted');
+  const rejected = h.normalizer.normalizeHistoryEntry({ ...entry, action: 'DEAL.TERMS_REJECTED', metadata: { rejectedVersionNumber: 3, previousAuthoritativeVersionNumber: 2, proposedTerms: { private: 'raw payload' } } });
+  assert.equal(rejected.label, 'Revised terms declined');
+  assert.match(rejected.description, /Version 3.*Previously agreed terms remain active/);
+  assert.equal(JSON.stringify(rejected).includes('raw payload'), false);
+});

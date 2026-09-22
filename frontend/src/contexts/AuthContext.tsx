@@ -11,11 +11,8 @@
  * Source of truth: the backend. The frontend keeps a local copy in
  * localStorage so the user persona survives a page refresh.
  *
- * In mock mode (VITE_USE_MOCK_DEALS=true), the persona is the *only*
- * authentication signal the UI relies on.
- *
- * In real-backend mode, the persona is sent as the `X-Mock-User` header
- * to short-circuit the auth middleware. The real backend always re-verifies.
+ * Development personas require explicit opt-in; real sessions use JWTs.
+ * Rejected credentials clear this context so protected routes return to login.
  */
 
 import {
@@ -30,13 +27,18 @@ import {
 import { useNavigate } from 'react-router-dom';
 import {
   clearAuth as clearAuthStorage,
+  AUTH_EXPIRED_EVENT,
+  DEV_PERSONAS_ENABLED,
   getMockUser,
+  getMockUserHeader,
   MOCK_USER_STORAGE_KEY,
+  TOKEN_STORAGE_KEY,
   setAccessToken,
   setMockUser,
   type MockUser,
 } from '../services/auth';
-import { findSeedUser, toMockUserHeader, type Role, type SeedUser } from '../config/seedUsers';
+import { authApi } from '../services/authApi';
+import { findSeedUser, type Role, type SeedUser } from '../config/seedUsers';
 
 interface AuthContextValue {
   /** Currently signed-in persona, or null. */
@@ -88,31 +90,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     const syncAccount = (event: StorageEvent) => {
       if (event.storageArea === window.localStorage &&
-          (event.key === MOCK_USER_STORAGE_KEY || event.key === null)) {
+          (event.key === MOCK_USER_STORAGE_KEY || event.key === TOKEN_STORAGE_KEY || event.key === null)) {
         setUser(getMockUser());
       }
     };
     window.addEventListener('storage', syncAccount);
-    return () => window.removeEventListener('storage', syncAccount);
+    const expireSession = () => setUser(null);
+    window.addEventListener(AUTH_EXPIRED_EVENT, expireSession);
+    return () => {
+      window.removeEventListener('storage', syncAccount);
+      window.removeEventListener(AUTH_EXPIRED_EVENT, expireSession);
+    };
   }, []);
 
   const signIn = useCallback<AuthContextValue['signIn']>(
     (seedUser, options) => {
+      if (!options?.accessToken && !DEV_PERSONAS_ENABLED) return;
       const mockUser: MockUser = {
         id: seedUser.id,
         email: seedUser.email,
         name: seedUser.name,
         role: seedUser.role,
       };
-      setUser(mockUser);
-      setMockUser(mockUser);
       setAccessToken(options?.accessToken ?? null);
+      setMockUser(mockUser);
+      setUser(mockUser);
     },
     [],
   );
 
   const switchPersona = useCallback<AuthContextValue['switchPersona']>(
     (seedUser) => {
+      if (!DEV_PERSONAS_ENABLED) return;
       const mockUser: MockUser = {
         id: seedUser.id,
         email: seedUser.email,
@@ -128,6 +137,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = useCallback<AuthContextValue['signOut']>(
     (redirect = true) => {
+      void authApi.logout().catch(() => { /* Local sign-out remains immediate offline. */ });
       setUser(null);
       clearAuthStorage();
       if (redirect) {
@@ -182,12 +192,5 @@ export function useActiveSeedUser(): SeedUser | null {
 export function useMockUserHeader(): string | null {
   const { user } = useAuth();
   if (!user) return null;
-  return toMockUserHeader({
-    id: user.id,
-    email: user.email,
-    name: user.name,
-    role: user.role,
-    password: '',
-    blurb: '',
-  });
+  return getMockUserHeader();
 }

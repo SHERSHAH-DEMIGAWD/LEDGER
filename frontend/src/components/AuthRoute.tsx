@@ -21,6 +21,7 @@
  */
 
 import { Navigate, useLocation } from 'react-router-dom';
+import { useIsPresent } from 'motion/react';
 import type { ReactNode } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import type { Role } from '../config/seedUsers';
@@ -34,8 +35,12 @@ interface AuthRouteProps {
 export function AuthRoute({ children, roles }: AuthRouteProps) {
   const { user } = useAuth();
   const location = useLocation();
+  const isPresent = useIsPresent();
 
   if (!user) {
+    // AnimatePresence retains the previous location during its exit. Once
+    // navigation starts, that old guard must not redirect to login again.
+    if (!isPresent) return null;
     return (
       <Navigate
         to="/login"
@@ -46,6 +51,7 @@ export function AuthRoute({ children, roles }: AuthRouteProps) {
   }
 
   if (roles && roles.length > 0 && !roles.includes(user.role)) {
+    if (!isPresent) return null;
     // Signed in but lacks the required role. Send to home page.
     return (
       <Navigate

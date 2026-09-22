@@ -194,10 +194,15 @@ test('AuthProvider follows another tab account switch/sign-out without overwriti
     '../services/auth': {
       clearAuth() { storedUser = null; storageWrites++; },
       getMockUser: () => storedUser,
+      getMockUserHeader: () => null,
       MOCK_USER_STORAGE_KEY: 'ledger.auth.mockUser',
+      TOKEN_STORAGE_KEY: 'ledger.auth.token',
+      AUTH_EXPIRED_EVENT: 'ledger:auth-expired',
+      DEV_PERSONAS_ENABLED: true,
       setMockUser(value) { storedUser = value; storageWrites++; },
       setAccessToken() {},
     },
+    '../services/authApi': { authApi: { logout: async () => {} } },
     '../config/seedUsers': { findSeedUser: () => null, toMockUserHeader: () => null },
   }, { window });
   const render = () => scheduler.render(module.AuthProvider, { children: null }).props.value;
@@ -215,4 +220,36 @@ test('AuthProvider follows another tab account switch/sign-out without overwriti
   assert.equal(render().user, null);
   assert.equal(storageWrites, 0);
   scheduler.unmount();
+});
+
+test('an exiting protected route cannot repeatedly redirect after sign-out', async () => {
+  let user = { id: 'brand', role: 'BRAND' };
+  let present = true;
+  const location = { pathname: '/deals/example', search: '?view=history' };
+  const module = await loadModule('components/AuthRoute.tsx', {
+    'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), Fragment: 'Fragment' },
+    'react-router-dom': { Navigate: 'Navigate', useLocation: () => location },
+    'motion/react': { useIsPresent: () => present },
+    '../contexts/AuthContext': { useAuth: () => ({ user }) },
+  });
+  const render = (roles) => module.AuthRoute({ children: 'Protected record', roles });
+  assert.equal(render().props.children, 'Protected record');
+
+  user = null;
+  const redirect = render();
+  assert.equal(redirect.type, 'Navigate');
+  assert.equal(redirect.props.to, '/login');
+  assert.equal(redirect.props.replace, true);
+  assert.equal(redirect.props.state.from, '/deals/example?view=history');
+
+  // The old route retains its location while the login destination enters.
+  present = false;
+  for (let renderCount = 0; renderCount < 3; renderCount++) assert.equal(render(), null);
+
+  // A normal authenticated route still has content to animate on its exit.
+  user = { id: 'brand', role: 'BRAND' };
+  assert.equal(render().props.children, 'Protected record');
+  assert.equal(render(['CREATOR']), null);
+  present = true;
+  assert.equal(render(['CREATOR']).props.to, '/');
 });

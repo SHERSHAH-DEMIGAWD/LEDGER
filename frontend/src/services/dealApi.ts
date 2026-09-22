@@ -183,6 +183,33 @@ export const dealApi = {
     }
   },
 
+  async proposeTerms(id: string, terms: DealTerms): Promise<ApiResult<Deal>> {
+    try {
+      await getHttpClient().post(`/deals/${encodeURIComponent(id)}/terms/propose`, { terms });
+      return { ok: true, data: await dealApi.getDeal(id) };
+    } catch (err) {
+      return failure(err, 'Unable to propose revised terms.');
+    }
+  },
+
+  async acceptProposal(id: string): Promise<ApiResult<Deal>> {
+    try {
+      await getHttpClient().post(`/deals/${encodeURIComponent(id)}/terms/accept`, {});
+      return { ok: true, data: await dealApi.getDeal(id) };
+    } catch (err) {
+      return failure(err, 'Unable to accept the proposed terms.');
+    }
+  },
+
+  async rejectProposal(id: string): Promise<ApiResult<Deal>> {
+    try {
+      await getHttpClient().post(`/deals/${encodeURIComponent(id)}/terms/reject`, {});
+      return { ok: true, data: await dealApi.getDeal(id) };
+    } catch (err) {
+      return failure(err, 'Unable to reject the proposed terms.');
+    }
+  },
+
   async getDealHistory(id: string): Promise<ApiResult<DealEvent[]>> {
     try {
       const { data } = await getHttpClient().get<{

@@ -13,7 +13,10 @@
  *   all other routes      — protected by AuthRoute, wrapped in AppShell
  */
 
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { MasterBackground } from './components/MasterBackground';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { AnimatePresence, motion } from 'motion/react';
 import { useReducedMotion } from './motion/hooks';
 import { duration, easing } from './motion/variants';
@@ -21,7 +24,6 @@ import { AppShell } from './components/AppShell';
 import { AuthRoute } from './components/AuthRoute';
 import { useAuth } from './contexts/AuthContext';
 import { CreateDealPage } from './pages/CreateDealPage';
-import './styles/transaction.css';
 import {
   DealNavigationProvider,
   useDealNavigation,
@@ -90,13 +92,7 @@ function AnimatedRouteWrapper({ children }: { children: React.ReactNode }) {
         ease: easing.inOut,
       }}
       onAnimationComplete={handleAnimationComplete}
-      style={{
-        position: 'absolute',
-        inset: 0,
-        // Important: this wrapper fills the parent, but the parent <main>
-        // needs position:relative for this to work correctly. The AppShell
-        // theme already sets position:relative on <main>.
-      }}
+      className="ledger-route"
     >
       {children}
     </motion.div>
@@ -115,6 +111,7 @@ function ProtectedLayout() {
           <Route path="/deals/new" element={<CreateDealPage />} />
           <Route path="/deals/:id" element={<DealDetailPage />} />
           <Route path="/invitations" element={<InvitationsPage />} />
+          <Route path="*" element={<div className="transaction-page"><p className="transaction-eyebrow">Page not found</p><h1 className="transaction-title">No record here.</h1><Link className="transaction-link" to="/deals">Return to your deals →</Link></div>} />
         </Routes>
       </AppShell>
     </AuthRoute>
@@ -123,14 +120,17 @@ function ProtectedLayout() {
 
 function App() {
   const location = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [location.pathname]);
 
   return (
     <DealNavigationProvider>
+      <MasterBackground />
       <AnimatePresence mode="wait" initial={false}>
         <Routes location={location} key={location.pathname}>
           {/* Public auth pages — centered on dark navy, no casebook metaphor */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
 
           {/* Protected routes with direction-aware animation */}
           <Route

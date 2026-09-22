@@ -121,6 +121,24 @@ test('invitation inbox preserves real brand identity, complete terms and version
   assert.deepEqual(plain(invitation.terms), terms);
 });
 
+for (const [method, endpoint] of [['proposeTerms', 'propose'], ['acceptProposal', 'accept'], ['rejectProposal', 'reject']]) {
+  test(`${method} refreshes the authoritative terms and payment instead of trusting a mutation response`, async () => {
+    const authoritative = backendDeal({ status: 'ACCEPTED', acceptedVersionNumber: 1 });
+    const h = await harness((verb, url) => {
+      if (verb === 'POST') return envelope({ terms: { authoritativeVersionNumber: 99 } });
+      if (url.endsWith('/payment-status')) return envelope(payment);
+      return envelope({ deal: authoritative });
+    });
+    const result = await h.api[method]('deal/id', terms);
+    assert.equal(result.ok, true);
+    assert.equal(result.data.termsVersionNumber, 1);
+    assert.deepEqual(plain(h.requests), [
+      ['POST', `/deals/deal%2Fid/terms/${endpoint}`, endpoint === 'propose' ? { terms } : {}],
+      ['GET', '/deals/deal%2Fid', null], ['GET', '/deals/deal%2Fid/payment-status', null],
+    ]);
+  });
+}
+
 for (const [action, status] of [['accept', 'ACCEPTED'], ['decline', 'DECLINED']]) {
   test(`${action} uses its dedicated endpoint and returns authoritative reloaded state`, async () => {
     const authoritative = backendDeal({ status, creatorId: creator.id, creator,

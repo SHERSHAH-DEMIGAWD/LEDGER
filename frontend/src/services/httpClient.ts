@@ -8,15 +8,8 @@
  * axios instance. This guarantees a single source of truth for the base URL,
  * timeouts, and header injection.
  *
- * Headers attached on every request:
- *   - `Authorization: Bearer <token>` if an access token is present
- *   - `X-Mock-User: <role>:<id>`     if a mock persona is set
- *     (this is forwarded to the backend in development for the persona switcher)
- *
- * The backend's `withMockUser` middleware reads `X-Mock-User` and
- * authenticates accordingly, falling back to real JWT if the header is
- * absent. This means the same client works in both mock-mode (no backend)
- * and real-backend-mode (with the seeded database).
+ * Uses a bearer token when available. Explicitly enabled development personas
+ * send X-Mock-User only when no real token exists. All transactions use HTTP.
  *
  * Base URL:
  *   - In development with Vite proxy: defaults to `/api` (relative).
@@ -28,12 +21,12 @@
  */
 
 import axios, { type AxiosInstance } from 'axios';
-import { getAccessToken, getMockUserHeader } from './auth';
+import { AUTH_EXPIRED_EVENT, clearAuth, getAccessToken, getMockUserHeader } from './auth';
 
 // Default to relative `/api` so the Vite dev proxy and same-origin production
 // deployments work without additional configuration. Set VITE_API_BASE_URL
 // to override.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 let httpClient: AxiosInstance | null = null;
 
@@ -55,11 +48,11 @@ export function getHttpClient(): AxiosInstance {
     httpClient = axios.create({
       baseURL: API_BASE_URL,
       timeout: 10_000,
+      withCredentials: true,
       headers: { 'Content-Type': 'application/json' },
     });
 
-    // Attach auth headers to every request. The interceptor runs for both
-    // the regular path and the mock-header path simultaneously.
+    // Read credentials for every request, including after account switching.
     httpClient.interceptors.request.use((config) => {
       const auth = buildAuthHeaders();
       // config.headers is always defined after axios.create above; cast
@@ -68,6 +61,24 @@ export function getHttpClient(): AxiosInstance {
       Object.assign(headers, auth);
       config.headers = headers as typeof config.headers;
       return config;
+    });
+
+    httpClient.interceptors.response.use((response) => response, (error: unknown) => {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        const headers = error.config?.headers;
+        const sentToken = headers?.Authorization;
+        const sentPersona = headers?.['X-Mock-User'];
+        const token = getAccessToken();
+        const persona = getMockUserHeader();
+        // A late response from the previous account cannot sign out a newly
+        // selected account. Only invalidate the credentials actually rejected.
+        if ((token && sentToken === `Bearer ${token}`) ||
+            (persona && sentPersona === persona)) {
+          clearAuth();
+          window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+        }
+      }
+      return Promise.reject(error);
     });
   }
   return httpClient;
