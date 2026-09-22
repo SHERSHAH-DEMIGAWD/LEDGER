@@ -449,32 +449,38 @@ describe('Terms Routes — Integration', () => {
       expect(res.body.data.terms.authoritativeTerms.paymentAmount).toBe(75000);
     });
 
-    it('200 — accept in FUNDED state', async () => {
+    it('400 — funded terms cannot change the payment amount', async () => {
       const deal = makeFundedDealWithV1();
       const pendingVersion = { id: 'v2', versionNumber: 2, isPending: true, terms: VALID_TERMS, createdAt: new Date() };
 
       mockRepo.findById.mockResolvedValue(deal);
       mockRepo.getPendingVersion.mockResolvedValue(pendingVersion as any);
-      mockRepo.acceptPendingVersion.mockResolvedValue({} as any);
-      mockRepo.getAuthoritativeVersion.mockResolvedValue(pendingVersion as any);
-      mockRepo.createAuditLog.mockResolvedValue({} as any);
+      mockRepo.getAuthoritativeVersion.mockResolvedValue(deal.versions[0] as any);
 
       const res = await request(app)
         .post('/deals/deal-1/terms/accept')
         .set('Authorization', CREATOR_AUTH);
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toContain('cannot change the payment amount or currency');
+      expect(mockRepo.acceptPendingVersion).not.toHaveBeenCalled();
     });
 
-    it('200 — accept in IN_PROGRESS state', async () => {
+    it('200 — accept non-financial changes in IN_PROGRESS state', async () => {
       const deal = makeInProgressDealWithV1();
-      const pendingVersion = { id: 'v2', versionNumber: 2, isPending: true, terms: VALID_TERMS, createdAt: new Date() };
+      const pendingVersion = {
+        id: 'v2', versionNumber: 2, isPending: true,
+        terms: { ...VALID_TERMS, paymentAmount: 50000 }, createdAt: new Date(),
+      };
 
       mockRepo.findById.mockResolvedValue(deal);
       mockRepo.getPendingVersion.mockResolvedValue(pendingVersion as any);
       mockRepo.acceptPendingVersion.mockResolvedValue({} as any);
-      mockRepo.getAuthoritativeVersion.mockResolvedValue(pendingVersion as any);
+      mockRepo.getAuthoritativeVersion
+        .mockResolvedValueOnce(deal.versions[0] as any)
+        .mockResolvedValueOnce(pendingVersion as any);
       mockRepo.createAuditLog.mockResolvedValue({} as any);
+      mockRepo.findByIdWithAccessCheck.mockResolvedValue(deal);
 
       const res = await request(app)
         .post('/deals/deal-1/terms/accept')

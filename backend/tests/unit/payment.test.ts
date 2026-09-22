@@ -37,6 +37,7 @@ const mockFindById = vi.fn();
 const mockFindByIdWithAccessCheck = vi.fn();
 const mockCreateAuditLog = vi.fn().mockResolvedValue(undefined);
 const mockGetAuthoritativeVersion = vi.fn();
+const mockGetPendingVersion = vi.fn();
 
 vi.mock('../../src/repositories/DealRepository.js', () => ({
   dealRepository: {
@@ -44,6 +45,7 @@ vi.mock('../../src/repositories/DealRepository.js', () => ({
     findByIdWithAccessCheck: (...args: unknown[]) => mockFindByIdWithAccessCheck(...args),
     createAuditLog: (...args: unknown[]) => mockCreateAuditLog(...args),
     getAuthoritativeVersion: (...args: unknown[]) => mockGetAuthoritativeVersion(...args),
+    getPendingVersion: (...args: unknown[]) => mockGetPendingVersion(...args),
   },
 }));
 
@@ -154,6 +156,7 @@ describe('PaymentService.fundDeal', () => {
     service = new PaymentService(mockProvider as any);
     vi.clearAllMocks();
     claimedDealIds.clear();
+    mockGetPendingVersion.mockResolvedValue(null);
 
     // Default: updateMany succeeds (counts 1)
     mockDealUpdateMany.mockResolvedValue({ count: 1 });

@@ -200,6 +200,22 @@ describe('Delivery through real HTTP, services and repository with substituted P
     expect(db.events).toHaveLength(2);
   });
 
+  it('cannot bypass required lifecycle notes through the generic transition route', async () => {
+    db.deals[0].status = 'SUBMITTED';
+    for (const action of ['REQUEST_REVISION', 'RAISE_DISPUTE'] as const) {
+      const response = await post('transition', brand, { action });
+      expect(response.status).toBe(400);
+      expect(db.deals[0].status).toBe('SUBMITTED');
+      expect(db.events).toEqual([]);
+    }
+
+    db.deals[0].status = 'DISPUTED';
+    const response = await post('transition', hrt, { action: 'RESOLVE' });
+    expect(response.status).toBe(400);
+    expect(db.deals[0].status).toBe('DISPUTED');
+    expect(db.events).toEqual([]);
+  });
+
   it.each([
     ['IN_PROGRESS', 'submit', creator, 'DELIVERABLE.SUBMITTED'],
     ['SUBMITTED', 'request-revision', brand, 'DELIVERABLE.REVISION_REQUESTED'],
@@ -230,4 +246,3 @@ describe('Delivery through real HTTP, services and repository with substituted P
     expect(db.events[0].metadata.toStatus).toBe(db.deals[0].status);
   });
 });
-

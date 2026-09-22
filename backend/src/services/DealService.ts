@@ -165,6 +165,15 @@ export async function transitionDeal(
   if (action === 'FUND') {
     throw new InvalidStateError('Funding must use POST /deals/:id/fund');
   }
+  if (action === 'REQUEST_REVISION') {
+    throw new InvalidStateError('Revision requests must use POST /deals/:id/request-revision with a note');
+  }
+  if (action === 'RAISE_DISPUTE') {
+    throw new InvalidStateError('Disputes must use POST /deals/:id/dispute with a note');
+  }
+  if (action === 'RESOLVE') {
+    throw new InvalidStateError('Dispute resolutions must use POST /deals/:id/resolve with a note');
+  }
   if (targetStatus === 'IN_PROGRESS') {
     const payment = deal.paymentRecordId
       ? await prisma.payment.findUnique({ where: { id: deal.paymentRecordId } })
@@ -626,6 +635,31 @@ export async function acceptProposal(
     throw new InvalidStateError(
       `Deal '${dealId}' has no pending term proposal to accept`,
     );
+  }
+
+  // Once funding has been recorded, accepting terms that change the payment
+  // amount or currency would make the authoritative agreement contradict the
+  // immutable payment record. Non-financial refinements remain permitted.
+  if (deal.fundingStatus !== 'NOT_FUNDED') {
+    const authoritative = await dealRepository.getAuthoritativeVersion(
+      dealId,
+      deal.acceptedVersionNumber,
+    );
+    if (!authoritative) {
+      throw new InvalidStateError(
+        `Deal '${dealId}' has no authoritative terms version`,
+      );
+    }
+    const currentTerms = authoritative.terms as unknown as DealTerms;
+    const proposedTerms = pending.terms as unknown as DealTerms;
+    if (
+      currentTerms.paymentAmount !== proposedTerms.paymentAmount ||
+      currentTerms.currency !== proposedTerms.currency
+    ) {
+      throw new InvalidStateError(
+        'Funded deal proposals cannot change the payment amount or currency',
+      );
+    }
   }
 
   const previousAuthoritativeVersionNumber = deal.acceptedVersionNumber;

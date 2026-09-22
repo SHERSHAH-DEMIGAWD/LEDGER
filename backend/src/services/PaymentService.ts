@@ -112,6 +112,16 @@ export class PaymentService {
       );
     }
 
+    // Funding must never race ahead of an unresolved commercial proposal.
+    // Otherwise the persisted payment can be for the old authoritative terms
+    // while the creator subsequently accepts a different payment amount.
+    const pendingTerms = await dealRepository.getPendingVersion(dealId);
+    if (pendingTerms) {
+      throw new ConflictError(
+        'Cannot fund a deal while a term proposal is pending. Accept or reject the proposal first.',
+      );
+    }
+
     // 5. Read the authoritative terms for the payment amount/currency.
     // CRITICAL: must use the AUTHORITATIVE terms version. Pending term
     // proposals must NOT affect payment.

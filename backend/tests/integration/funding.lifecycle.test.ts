@@ -99,15 +99,27 @@ beforeEach(() => {
 });
 
 describe('verified funding lifecycle', () => {
-  it.each([true, false])('charges accepted v2 rather than a newer pending/rejected proposal (pending=%s)', async (isPending) => {
+  it('charges accepted v2 rather than a newer rejected proposal', async () => {
     db.deal.versions.push(
       { ...db.deal.versions[0], id: 'v2', versionNumber: 2, terms: { ...db.deal.versions[0].terms, paymentAmount: 65000 } },
-      { ...db.deal.versions[0], id: 'v3', versionNumber: 3, isPending, terms: { ...db.deal.versions[0].terms, paymentAmount: 99000 } },
+      { ...db.deal.versions[0], id: 'v3', versionNumber: 3, isPending: false, terms: { ...db.deal.versions[0].terms, paymentAmount: 99000 } },
     );
     db.deal.acceptedVersionNumber = 2;
     await service.fundDeal('deal', brand);
     expect(db.payment.amount).toBe(65000);
     expect(provider.createIdempotentIntent).toHaveBeenCalledWith(expect.any(String), 65000, 'USD', expect.any(Object));
+  });
+
+  it('blocks funding while a term proposal is pending', async () => {
+    db.deal.versions.push({
+      ...db.deal.versions[0], id: 'v2', versionNumber: 2, isPending: true,
+      terms: { ...db.deal.versions[0].terms, paymentAmount: 90000 },
+    });
+    await expect(service.fundDeal('deal', brand)).rejects.toThrow(
+      'Cannot fund a deal while a term proposal is pending',
+    );
+    expect(db.payment).toBeNull();
+    expect(provider.createIdempotentIntent).not.toHaveBeenCalled();
   });
 
   it('concurrent funding attempts confirm one payment only', async () => {
@@ -137,8 +149,6 @@ describe('verified funding lifecycle', () => {
     expect(db.deal.status).toBe('ACCEPTED');
   });
   it('funds accepted terms atomically and permits the creator to start work', async () => {
-    db.deal.versions.push({ ...db.deal.versions[0], id: 'v2', versionNumber: 2, isPending: true,
-      terms: { ...db.deal.versions[0].terms, paymentAmount: 90000 } });
     await service.fundDeal('deal', brand);
     expect(db.payment).toMatchObject({ status: 'SUCCEEDED', amount: 50000, paymentId: 'provider-payment' });
     expect(db.deal).toMatchObject({ status: 'FUNDED', fundingStatus: 'FUNDED', paymentRecordId: 'payment-row' });
