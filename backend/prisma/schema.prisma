@@ -7,27 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================
-// Authentication & User Management
-// ============================================================
-
 model User {
-  id               String    @id @default(uuid())
-  email            String    @unique
-  passwordHash     String
-  role             Role      @default(CREATOR)
-  emailVerified    Boolean   @default(false)
-  lockedUntil      DateTime? // Account lockout expiration
-  failedLogins     Int       @default(0)
-  profile          UserProfile?
-  refreshTokens    RefreshToken[]
+  id                 String              @id @default(uuid())
+  email              String              @unique
+  passwordHash       String
+  role               Role                @default(CREATOR)
+  emailVerified      Boolean             @default(false)
+  lockedUntil        DateTime?
+  failedLogins       Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  deletedAt          DateTime?
+  auditLogs          AuditLog[]
+  dealsAsBrand       Deal[]              @relation("BrandDeals")
+  dealsAsCreator     Deal[]              @relation("CreatorDeals")
   emailVerifications EmailVerification[]
-  auditLogs        AuditLog[]
-  dealsAsBrand     Deal[]    @relation("BrandDeals")
-  dealsAsCreator   Deal[]    @relation("CreatorDeals")
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  deletedAt        DateTime?
+  refreshTokens      RefreshToken[]
+  profile            UserProfile?
 
   @@index([email])
   @@index([role])
@@ -36,77 +32,60 @@ model User {
 model UserProfile {
   id        String   @id @default(uuid())
   userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String?
   company   String?
   bio       String?
   avatarUrl String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// Refresh tokens stored for revocation support
 model RefreshToken {
-  id        String   @id @default(uuid())
-  tokenHash String   @unique // SHA-256 hash of the token
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tokenHash])
   @@index([expiresAt])
 }
 
-// Email verification tokens — stored as SHA-256 hash, not plaintext.
 model EmailVerification {
   id        String   @id @default(uuid())
   tokenHash String   @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tokenHash])
   @@index([userId])
 }
 
-// ============================================================
-// Deal Domain
-// ============================================================
-
 model Deal {
-  id                    String        @id @default(uuid())
-  brandId               String
-  brand                 User          @relation("BrandDeals", fields: [brandId], references: [id])
-  creatorId             String?
-  creator               User?         @relation("CreatorDeals", fields: [creatorId], references: [id])
-  status                DealStatus    @default(DRAFT)
-  // acceptedVersionNumber tracks which DealVersion is currently authoritative.
-  // Initially set to 1 when a deal is created. Updated when term proposals are accepted.
-  // A value of null means no version has been explicitly accepted (legacy state).
-  acceptedVersionNumber Int?
-  // NOTE: Deal terms are NOT stored here. DealVersion is the authoritative source for versioned terms.
-  contractId            String?
-  fundingStatus         FundingStatus @default(NOT_FUNDED)
-  // paymentRecordId is the FK to the Payment record. Set on successful funding.
-  // Used for fast lookup of the associated payment from the Deal row.
-  // (The canonical relation is Payment.dealId → Deal.id, with the unique
-  //  constraint on Payment.dealId enforcing the one-to-one.)
-  paymentRecordId       String?
-  // latestRevisionNote persists the most recent revision / dispute resolution
-  // note on the deal so it can be retrieved independently of the audit log.
-  // The audit log remains the authoritative history; this column is a mirror
-  // of the most-recent note for direct retrieval.
-  latestRevisionNote           String?
-  latestRevisionNoteAuthorId   String?
-  latestRevisionNoteAt         DateTime?
-  versions              DealVersion[]
-  auditLogs             AuditLog[]
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  id                         String        @id @default(uuid())
+  brandId                    String
+  creatorId                  String?
+  status                     DealStatus    @default(DRAFT)
+  contractId                 String?
+  fundingStatus              FundingStatus @default(NOT_FUNDED)
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
+  acceptedVersionNumber      Int?
+  paymentRecordId            String?
+  latestRevisionNote         String?
+  latestRevisionNoteAuthorId String?
+  latestRevisionNoteAt       DateTime?
+  auditLogs                  AuditLog[]
+  brand                      User          @relation("BrandDeals", fields: [brandId], references: [id])
+  creator                    User?         @relation("CreatorDeals", fields: [creatorId], references: [id])
+  versions                   DealVersion[]
+  payment                    Payment?
 
   @@index([brandId])
   @@index([creatorId])
@@ -114,22 +93,18 @@ model Deal {
   @@index([fundingStatus])
 }
 
-// Payment record — one per deal (enforced by unique dealId constraint).
-// The unique constraint is the atomic guard against concurrent fundDeal
-// requests creating multiple payment intents. The losing concurrent
-// request gets a P2002 unique-violation error and never reaches the
-// payment provider.
 model Payment {
-  id        String   @id @default(uuid())
+  id        String   @id @default(dbgenerated("(gen_random_uuid())::text"))
   dealId    String   @unique
   amount    Int
   currency  String   @default("USD")
   status    String   @default("PENDING")
-  paymentId String   // The provider's payment/charge ID (final, post-confirm)
-  intentId  String   // The provider's intent ID (pre-confirm, used in audit trail)
+  paymentId String
+  intentId  String
   actorId   String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
+  deal      Deal     @relation(fields: [dealId], references: [id])
 
   @@index([status])
   @@index([actorId])
@@ -138,36 +113,29 @@ model Payment {
 model DealVersion {
   id            String   @id @default(uuid())
   dealId        String
-  deal          Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
   versionNumber Int
-  // isPending indicates this version is a proposed change awaiting counterparty acceptance.
-  // A version with isPending=true must NOT be used for payments or as authoritative terms.
-  // Once accepted, isPending is set to false (or the acceptedVersionNumber points to it).
-  // A version with isPending=true that is rejected never becomes authoritative.
-  isPending     Boolean  @default(false)
   terms         Json
   createdAt     DateTime @default(now())
+  isPending     Boolean  @default(false)
+  deal          Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
 
   @@unique([dealId, versionNumber])
   @@index([dealId])
+  @@index([dealId, isPending])
 }
-
-// ============================================================
-// Audit Logging (for auth events and deal events)
-// ============================================================
 
 model AuditLog {
   id           String   @id @default(uuid())
   actorId      String?
-  actor        User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
   dealId       String?
-  deal         Deal?    @relation(fields: [dealId], references: [id], onDelete: SetNull)
-  action       String   // e.g., "AUTH.LOGIN", "AUTH.REGISTER", "AUTH.FAILED_LOGIN", "DEAL.CREATED", "DEAL.STATE_CHANGED"
-  resourceType String   // e.g., "User", "Session", "Deal", "DealVersion"
+  action       String
+  resourceType String
   resourceId   String
-  metadata     Json?    // { ipAddress, userAgent, ... }
+  metadata     Json?
   ipAddress    String?
   timestamp    DateTime @default(now())
+  actor        User?    @relation(fields: [actorId], references: [id])
+  deal         Deal?    @relation(fields: [dealId], references: [id])
 
   @@index([actorId])
   @@index([dealId])
@@ -176,15 +144,11 @@ model AuditLog {
   @@index([timestamp])
 }
 
-// ============================================================
-// Enums
-// ============================================================
-
 enum Role {
   BRAND
   CREATOR
-  HRT      // Human Review Team - dispute handling only
-  ADMIN    // System administration - user management, audit logs
+  HRT
+  ADMIN
 }
 
 enum DealStatus {

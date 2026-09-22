@@ -22,6 +22,7 @@
 
 import { PrismaClient, Role } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { createHash } from 'node:crypto';
 import { config } from '../src/config.js';
 
 const prisma = new PrismaClient();
@@ -34,6 +35,11 @@ const SHARED_PASSWORD = 'Test1234';
 
 async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, config.auth.bcryptRounds);
+}
+
+function seedId(key: string): string {
+  const hex = createHash('sha256').update(`ledger-seed:${key}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -374,34 +380,65 @@ async function main(): Promise<void> {
   // ---------------------------------------------------------------------------
   console.log('\nCreating deals...');
   for (const deal of SEED_DEALS) {
-    const existing = await prisma.deal.findUnique({ where: { id: deal.id } });
-    if (existing) {
-      // Update status if it changed (seed re-run scenario)
-      await prisma.deal.update({
+    // Restore each fixture atomically, including its authoritative version/payment.
+    await prisma.$transaction(async (tx) => {
+      await tx.deal.upsert({
         where: { id: deal.id },
-        data: {
+        update: {
           status: deal.status as never,
           fundingStatus: deal.fundingStatus as never,
           creatorId: deal.creatorId,
+          acceptedVersionNumber: 1,
         },
-      });
-    } else {
-      await prisma.deal.create({
-        data: {
+        create: {
           id: deal.id,
           brandId: deal.brandId,
           creatorId: deal.creatorId,
           status: deal.status as never,
           fundingStatus: deal.fundingStatus as never,
-          versions: {
-            create: {
-              versionNumber: 1,
-              terms: deal.terms as never,
-            },
-          },
+          acceptedVersionNumber: 1,
         },
       });
-    }
+      const version = await tx.dealVersion.upsert({
+        where: { dealId_versionNumber: { dealId: deal.id, versionNumber: 1 } },
+        update: { isPending: false },
+        create: {
+          id: seedId(`version:${deal.id}:1`),
+          dealId: deal.id,
+          versionNumber: 1,
+          isPending: false,
+          terms: deal.terms as never,
+        },
+      });
+      if (deal.fundingStatus === 'FUNDED') {
+        const terms = version.terms as { paymentAmount: number; currency: string };
+        if (!Number.isSafeInteger(terms.paymentAmount) || terms.paymentAmount <= 0 ||
+            typeof terms.currency !== 'string' || !/^[A-Z]{3}$/.test(terms.currency)) {
+          throw new Error(`Invalid authoritative payment terms for seed deal ${deal.id}`);
+        }
+        const paymentData = {
+          amount: terms.paymentAmount,
+          currency: terms.currency,
+          status: 'SUCCEEDED',
+          actorId: deal.brandId,
+        };
+        const payment = await tx.payment.upsert({
+          where: { dealId: deal.id },
+          update: paymentData,
+          create: {
+            ...paymentData,
+            id: seedId(`payment:${deal.id}`),
+            dealId: deal.id,
+            paymentId: `seed_payment_${deal.id}`,
+            intentId: `seed_intent_${deal.id}`,
+          },
+        });
+        await tx.deal.update({
+          where: { id: deal.id },
+          data: { paymentRecordId: payment.id },
+        });
+      }
+    });
     console.log(`  ✓ ${deal.status} — ${(deal.terms as { title: string }).title}`);
   }
 
@@ -410,13 +447,16 @@ async function main(): Promise<void> {
   // ---------------------------------------------------------------------------
   console.log('\nCreating audit logs...');
   for (const deal of SEED_DEALS) {
-    for (const event of deal.auditEvents) {
+    for (const [index, event] of deal.auditEvents.entries()) {
+      // Preserve any old random-ID history; only new fixture events use stable IDs.
+      const id = seedId(`audit:${deal.id}:${index}:${event.action}`);
       await prisma.auditLog.upsert({
         where: {
-          id: `${deal.id}-${event.action}-${event.actorId ?? 'system'}-${Math.floor(Date.now() / 1000)}`,
+          id,
         },
         update: {},
         create: {
+          id,
           actorId: event.actorId,
           dealId: deal.id,
           action: event.action,
