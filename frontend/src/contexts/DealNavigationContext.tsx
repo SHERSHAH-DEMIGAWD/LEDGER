@@ -21,6 +21,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type MutableRefObject,
 } from 'react';
 
 /**
@@ -33,21 +34,52 @@ import {
  */
 export type DealNavDirection = 'forward' | 'backward' | 'next-record' | 'prev-record' | 'up' | 'down' | 'none';
 
+export interface RecordOrigin {
+  id: string;
+  from: string;
+  to: string;
+}
+
+export interface RecordSnapshot {
+  element: HTMLElement;
+  bounds: DOMRect;
+}
+
 interface DealNavigationValue {
   direction: DealNavDirection;
   recordNavigation: (dir: DealNavDirection) => void;
   resetDirection: () => void;
+  recordOrigin: RecordOrigin | null;
+  recordSnapshot: MutableRefObject<RecordSnapshot | null>;
+  openRecord: (element: HTMLAnchorElement, id: string, from: string) => void;
+  clearRecord: () => void;
 }
 
 const DealNavigationContext = createContext<DealNavigationValue>({
   direction: 'none',
   recordNavigation: () => {},
   resetDirection: () => {},
+  recordOrigin: null,
+  recordSnapshot: { current: null },
+  openRecord: () => {},
+  clearRecord: () => {},
 });
 
 export function DealNavigationProvider({ children }: { children: ReactNode }) {
   const [direction, setDirection] = useState<DealNavDirection>('none');
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [recordOrigin, setRecordOrigin] = useState<RecordOrigin | null>(null);
+  const recordSnapshot = useRef<RecordSnapshot | null>(null);
+  const openRecord = useCallback((element: HTMLAnchorElement, id: string, from: string) => {
+    // A decorative DOM snapshot only; the detail still loads its own live data.
+    // Capture before the router's existing scroll reset. No navigation is delayed.
+    recordSnapshot.current = { element: element.cloneNode(true) as HTMLElement, bounds: element.getBoundingClientRect() };
+    setRecordOrigin({ id, from, to: new URL(element.href).pathname });
+  }, []);
+  const clearRecord = useCallback(() => {
+    recordSnapshot.current = null;
+    setRecordOrigin(null);
+  }, []);
 
   const recordNavigation = useCallback((dir: DealNavDirection) => {
     // Clear any pending reset
@@ -69,7 +101,7 @@ export function DealNavigationProvider({ children }: { children: ReactNode }) {
 
   return (
     <DealNavigationContext.Provider
-      value={{ direction, recordNavigation, resetDirection }}
+      value={{ direction, recordNavigation, resetDirection, recordOrigin, recordSnapshot, openRecord, clearRecord }}
     >
       {children}
     </DealNavigationContext.Provider>

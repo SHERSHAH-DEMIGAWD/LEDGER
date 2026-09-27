@@ -79,7 +79,25 @@ button:disabled { cursor: not-allowed; }
 button, a, input, textarea, select, summary { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 2px solid #d5bd87; outline-offset: 4px; }
 ::selection { color: #f4e8ce; background: #705933; }
-.ledger-master-background { position: fixed; inset: 0; z-index: -1; background: #080604 url('/ledger-master-bg.png') center / cover no-repeat; pointer-events: none; }
+.ledger-master-background { position: fixed; inset: 0; z-index: -1; overflow: hidden; background: #080604; pointer-events: none; }
+.ledger-master-background__photograph { position: absolute; inset: 0; transform-origin: 66% 56%; }
+.ledger-master-background__viewpoint { position: absolute; inset: 0; background: url('/ledger-master-bg.png') center / cover no-repeat; transform-origin: center; }
+/* Temporary entrance treatments; the resting composition has no transforms/masks. */
+[data-ledger-entrance] .ledger-master-background__photograph { will-change: transform, opacity; }
+[data-ledger-entrance] .login-page__panel::before { opacity: var(--opening-lane, 0); }
+[data-ledger-entrance] :is(.login-page__head > *, .login-page__register, .login-page__foot, .auth-personas, .auth-caption, .login-page__panel > :not(.login-page__head, .login-page__register, .login-page__foot, .auth-personas), .ledger-app-shell) {
+  mask-image: linear-gradient(110deg, #000 40%, transparent 65%);
+  mask-size: 300% 100%;
+  mask-repeat: no-repeat;
+}
+[data-ledger-entrance="preparing"] :is(.ledger-master-background__photograph, .auth-wordmark, .login-page__head > *, .login-page__register, .login-page__foot, .auth-personas, .auth-caption, .login-page__panel > :not(.login-page__head, .login-page__register, .login-page__foot, .auth-personas), .ledger-app-shell) { opacity: 0; }
+@media (max-width: 600px) {
+  .ledger-master-background__photograph { transform-origin: 55% 35%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-ledger-entrance] .ledger-master-background__photograph { transform: none !important; filter: none !important; will-change: opacity; }
+  [data-ledger-entrance] :is(.login-page *, .ledger-app-shell) { mask-image: none; }
+}
 .ledger-route, .ledger-app-shell { position: relative; min-height: 100vh; }
 .ledger-app-shell { background: transparent; }
 .ledger-topbar { position: relative; z-index: 20; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 26px; min-height: 88px; padding: 0 48px; border-bottom: 1px solid var(--color-border); background: rgba(15,11,7,.73); }
@@ -92,6 +110,13 @@ button, a, input, textarea, select, summary { -webkit-tap-highlight-color: trans
 .ledger-nav-dot { width: 4px; height: 4px; border-radius: 50%; background: #cfb889; }
 .ledger-topbar-right { justify-self: end; min-width: 0; }
 .ledger-main, .ledger-content { position: relative; min-width: 0; }
+.ledger-content { overflow-x: clip; }
+.ledger-context { transform-origin: 32% 24%; }
+.ledger-topnav-item { position: relative; transition: color .25s ease; }
+.ledger-nav-indicator { position: absolute; height: 1px; bottom: 0; left: 0; right: 0; background: #cfb889; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ledger-master-background__viewpoint, .ledger-context { transform: none !important; }
+}
 .ledger-main { min-height: calc(100vh - 88px); }
 .ledger-skip-link { position: absolute; left: 24px; top: -100px; z-index: 100; background: #282016; padding: 12px; }
 .ledger-skip-link:focus { top: 10px; }
@@ -130,6 +155,22 @@ button, a, input, textarea, select, summary { -webkit-tap-highlight-color: trans
 .record-list__entries { list-style: none; margin: 0; padding: 0; }
 .record-row { align-items: center; padding: 20px 0; border-bottom: 1px solid var(--color-border); }
 .record-row:hover { background: rgba(196,166,112,.06); }
+/* One selected row carries its printed identity into the existing record surface. */
+[data-record-handoff] { opacity: 1 !important; }
+[data-record-opening] > .transaction-header, [data-record-opening] > .record-tools, [data-record-opening] .record-list__head { opacity: .3; transition: opacity .16s ease; }
+[data-record-opening] .record-row:not([data-record-selected]) { opacity: .42; transition: opacity .14s ease; }
+[data-record-selected] { visibility: hidden; }
+.ledger-record-bridge { position: fixed; inset: 0; z-index: 25; overflow: hidden; pointer-events: none; }
+.ledger-record-bridge .record-row { border-block: 1px solid rgba(207,181,128,.42); background: linear-gradient(90deg, rgba(14,10,6,.75), rgba(14,10,6,.3)); pointer-events: none; }
+[data-record-reveal] > .transaction-header { animation: record-readable .32s cubic-bezier(.22,.72,.22,1) both; }
+[data-record-reveal] > :not(.transaction-header) { animation: record-readable .34s .06s cubic-bezier(.22,.72,.22,1) both; }
+[data-record-returning] { animation: record-return .5s ease-out both; }
+@keyframes record-readable { from { opacity: 0; } to { opacity: 1; } }
+@keyframes record-return { from { background-color: rgba(196,166,112,.16); border-color: #cfb889; } to { background-color: transparent; border-color: var(--color-border); } }
+@media (prefers-reduced-motion: reduce) {
+  .ledger-record-bridge .record-row { transform: none !important; }
+  [data-record-reveal] > *, [data-record-returning] { animation: none; }
+}
 .record-row__identity { display: flex; gap: 15px; min-width: 0; align-items: baseline; }
 .record-row__number { color: #b49a70; font: 10px var(--font-mono); }
 .record-row h3 { font-size: 16px; line-height: 1.4; font-weight: 500; margin: 0 0 6px; overflow-wrap: anywhere; }

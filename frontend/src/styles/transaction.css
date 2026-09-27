@@ -48,9 +48,13 @@
 .transaction-intro { max-width: 550px; margin: 0; color: #c2b8a7; font-size: 16px; line-height: 1.65; }
 .transaction-rule { border: 0; border-top: 1px solid rgba(207, 181, 128, .23); margin: 28px 0; }
 .transaction-section { padding: 28px 0; border-top: 1px solid rgba(207, 181, 128, .23); }
+.transaction-section[id] { scroll-margin-top: 24px; }
+.transaction-section[id]:focus-visible { outline: 1px solid #cfb580; outline-offset: 6px; }
 .transaction-section > h2 { margin: 0 0 22px; color: #e1d5c0; font-family: var(--font-display); font-size: 28px; font-weight: 400; }
 .transaction-header .transaction-actions { margin-bottom: 22px; }
-.transaction-subheading { margin: 0 0 18px; color: #e1d5c0; font-size: 14px; font-weight: 500; }
+.transaction-section-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 24px; margin-top: 16px; }
+.transaction-section-nav > a { display: inline-flex; align-items: center; min-height: 44px; max-width: 100%; overflow-wrap: anywhere; }
+.transaction-subheading { margin: 0 0 18px; color: #e1d5c0; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
 .transaction-subheading span { color: #b9ae9b; font-weight: 400; }
 .transaction-note { margin: 0 0 22px; color: #b9ae9b; font-size: 13px; line-height: 1.65; }
 .transaction-create-layout { display: grid; grid-template-columns: minmax(0, 660px) minmax(160px, 1fr); gap: 64px; align-items: start; }
@@ -132,9 +136,9 @@
 .transaction-state--empty { border-block-style: dashed; }
 .transaction-state--error { border-top-color: rgba(202,148,127,.52); border-bottom-color: rgba(202,148,127,.2); }
 .transaction-state--error::before { background: radial-gradient(ellipse at 50% 42%, rgba(46,24,16,.58), rgba(20,13,9,.34) 58%, transparent 78%); }
-.transaction-state__title { color: var(--color-text-primary); font-family: var(--font-display); font-size: var(--text-lg); font-weight: 500; }
-.transaction-state__description { max-width: 390px; color: var(--color-text-secondary); font-size: var(--text-sm); line-height: 1.6; }
-.transaction-state__action { margin-top: var(--space-2); }
+.transaction-state__title { min-width: 0; max-width: 100%; color: var(--color-text-primary); font-family: var(--font-display); font-size: var(--text-lg); font-weight: 500; overflow-wrap: anywhere; }
+.transaction-state__description { min-width: 0; max-width: min(390px, 100%); color: var(--color-text-secondary); font-size: var(--text-sm); line-height: 1.6; overflow-wrap: anywhere; }
+.transaction-state__action { min-width: 0; max-width: 100%; margin-top: var(--space-2); overflow-wrap: anywhere; }
 
 /* Toasts read as short editorial annotations, not floating application cards. */
 .transaction-toasts { position: fixed; top: 20px; right: 16px; z-index: 9999; width: min(370px, calc(100vw - 32px)); pointer-events: none; }
@@ -158,12 +162,12 @@
 .transaction-terms-deliverables p { margin: 0; color: #b9ae9b; font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .transaction-deadline { display: block; margin-top: 10px; color: #cfb580; font-size: 11px; }
 .transaction-terms-milestones { margin-top: 22px; }
-.transaction-terms-milestones ul { margin: 0; padding-left: 18px; color: #b9ae9b; font-size: 13px; line-height: 1.7; }
-.transaction-section dl { margin: 0; }
+.transaction-terms-milestones ul { margin: 0; padding-left: 18px; color: #b9ae9b; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.transaction-section > dl { margin: 0; }
 .transaction-section dd { margin: 0; overflow-wrap: anywhere; }
 .transaction-section dd small { display: block; margin-top: 7px; color: #b9ae9b; font-size: 12px; }
 .transaction-history { list-style: none; margin: 0; padding: 0; }
-.transaction-history li { padding: 14px 0; border-top: 1px solid rgba(207, 181, 128, .18); font-size: 13px; }
+.transaction-history li { padding: 14px 0; border-top: 1px solid rgba(207, 181, 128, .18); font-size: 13px; overflow-wrap: anywhere; }
 .transaction-history small { display: block; margin-top: 7px; color: #b9ae9b; font-size: 11px; }
 
 .transaction-deal-name { margin: 0 0 22px; color: #d5c7af; font-size: 18px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
@@ -171,6 +175,55 @@
 .transaction-event-detail { margin: 8px 0; color: #b9ae9b; font-size: 12px; overflow-wrap: anywhere; }
 .transaction-note-editor { margin-top: 28px; max-width: 680px; }
 .transaction-delivery-page .transaction-history strong { font-weight: 500; color: #ded3c0; }
+
+/* The status and its actual audit entries form one record. No inferred steps. */
+.transaction-lifecycle { --record-light: #cfb580; --record-travel: 4px; }
+.transaction-record-state { position: relative; display: inline-flex; align-items: center; gap: 16px; min-height: 54px; padding-bottom: 16px; }
+.transaction-record-rule { position: relative; width: 96px; height: 12px; flex-shrink: 0; }
+.transaction-record-rule::before, .transaction-record-rule i { content: ''; position: absolute; top: 5px; left: 0; width: 100%; height: 1px; background: var(--record-light); }
+.transaction-record-rule::before { opacity: .22; }
+.transaction-record-rule i { transform-origin: left center; }
+.transaction-record-rule b { position: absolute; right: 0; top: 1px; width: 9px; height: 9px; border: 1px solid var(--record-light); background: #211c13; border-radius: 50%; }
+.transaction-previous-state { position: absolute; bottom: 0; right: 0; color: #b9ae9b; font-size: 10px; line-height: 14px; pointer-events: none; }
+.transaction-header .transaction-actions { align-items: center; }
+.transaction-lifecycle[data-lifecycle-mark="amendment"] .transaction-record-rule i { transform-origin: right center; }
+.transaction-lifecycle[data-lifecycle-mark="amendment"] .transaction-record-rule b,
+.transaction-lifecycle .transaction-history [data-history-mark="amendment"]::after { border-radius: 0; border-style: double; border-width: 3px; }
+.transaction-lifecycle[data-lifecycle-amended] .transaction-record-rule b { box-shadow: -5px 4px 0 -2px #211c13, -5px 4px 0 -1px var(--record-light); }
+.transaction-lifecycle[data-lifecycle-mark="interrupted"] { --record-light: #c49983; }
+.transaction-lifecycle[data-lifecycle-mark="interrupted"] .transaction-record-rule i { background: repeating-linear-gradient(90deg, var(--record-light) 0 9px, transparent 9px 14px); }
+.transaction-lifecycle[data-lifecycle-mark="interrupted"] .transaction-record-rule b,
+.transaction-lifecycle .transaction-history [data-history-mark="interrupted"]::after { border-radius: 0; background: #291e19; border-color: #c49983; }
+.transaction-lifecycle[data-lifecycle-mark="outcome"] .transaction-record-rule b,
+.transaction-lifecycle[data-lifecycle-mark="confirmation"] .transaction-record-rule b,
+.transaction-lifecycle .transaction-history [data-history-mark="confirmation"]::after,
+.transaction-lifecycle .transaction-history [data-history-mark="outcome"]::after { background: #b79e70; box-shadow: inset 0 0 0 2px #211c13; }
+.transaction-lifecycle[data-lifecycle-status="COMPLETED"] .transaction-record-rule b,
+.transaction-lifecycle .transaction-history [data-history-mark="closed"]::after { background: #d7bd87; box-shadow: 0 0 0 3px rgba(207,181,128,.12); }
+.transaction-lifecycle[data-lifecycle-status="COMPLETED"] .transaction-record-rule i { height: 2px; }
+.transaction-lifecycle[data-lifecycle-funded] .transaction-funded-amount { color: #e1cea8; }
+.transaction-lifecycle[data-lifecycle-changing] .transaction-intro,
+.transaction-lifecycle[data-lifecycle-changing] [aria-label="Current responsibility"] > h2 { animation: record-content-settle var(--lifecycle-duration) ease-out both; }
+.transaction-lifecycle[data-lifecycle-changing][data-lifecycle-mark="amendment"] [aria-label="Latest revision or resolution note"] .transaction-recorded-note,
+.transaction-lifecycle[data-lifecycle-changing][data-lifecycle-mark="outcome"] [aria-label="Latest revision or resolution note"] .transaction-recorded-note { animation: record-amendment var(--lifecycle-duration) ease-out both; }
+.transaction-lifecycle[data-lifecycle-changing][data-lifecycle-funded] .transaction-funded-amount,
+.transaction-lifecycle[data-lifecycle-changing][data-lifecycle-funded] [aria-labelledby="deal-terms-heading"] .transaction-terms-facts > div:first-child dd { animation: record-metal var(--lifecycle-duration) ease-out both; }
+.transaction-lifecycle[data-lifecycle-changing][data-lifecycle-status="COMPLETED"] .transaction-record-state { animation: record-metal var(--lifecycle-duration) ease-out both; }
+.transaction-lifecycle .transaction-history { padding-left: 5px; }
+.transaction-lifecycle .transaction-history li { position: relative; margin: 0; padding: 2px 0 27px 28px; border: 0; line-height: 1.6; }
+.transaction-lifecycle .transaction-history li::before { content: ''; position: absolute; left: 0; top: 10px; bottom: -10px; width: 1px; background: rgba(207,181,128,.32); }
+.transaction-lifecycle .transaction-history li:last-child::before { display: none; }
+.transaction-lifecycle .transaction-history li::after { content: ''; position: absolute; left: -4px; top: 8px; width: 9px; height: 9px; border: 1px solid #9c8862; border-radius: 50%; background: #211c13; }
+.transaction-lifecycle .transaction-history [data-history-latest]::after { border-color: #e1cea8; }
+.transaction-lifecycle .transaction-history [data-history-mark="amendment"],
+.transaction-lifecycle .transaction-history [data-history-mark="interrupted"] { padding-left: 40px; }
+.transaction-lifecycle .transaction-history [data-history-mark="amendment"]::after,
+.transaction-lifecycle .transaction-history [data-history-mark="interrupted"]::after { left: 8px; }
+.transaction-lifecycle .transaction-history [data-history-mark="interrupted"]::before { background: repeating-linear-gradient(180deg, #9c7b68 0 6px, transparent 6px 11px); }
+.transaction-lifecycle .transaction-history [data-history-fresh]::after { animation: record-metal .9s ease-out; }
+@keyframes record-content-settle { from { opacity: .78; } to { opacity: 1; } }
+@keyframes record-amendment { from { opacity: .78; transform: translateX(var(--record-travel)); } to { opacity: 1; transform: none; } }
+@keyframes record-metal { 0%, 100% { filter: brightness(1); } 38% { filter: brightness(1.32); } }
 
 @media (max-width: 1050px) {
   .transaction-page { padding: 42px 36px 90px; }
@@ -188,6 +241,9 @@
 }
 
 @media (max-width: 600px) {
+  .transaction-lifecycle { --record-travel: 2px; }
+  .transaction-record-rule { width: 54px; }
+  .transaction-record-state { gap: 12px; }
   .transaction-page { padding: 30px 22px 72px; }
   .transaction-page::before { inset: 0; background: linear-gradient(90deg, rgba(10, 8, 6, .68), rgba(10, 8, 6, .74) 75%, rgba(10, 8, 6, .56)); mask-image: linear-gradient(transparent, #000 50px, #000 calc(100% - 50px), transparent); }
   .transaction-header { margin-bottom: 32px; }
@@ -207,6 +263,13 @@
   .transaction-form-actions .transaction-button { width: 100%; }
   .transaction-terms-facts { gap: 22px 28px; }
   .transaction-terms-deliverables li { gap: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transaction-lifecycle { --record-travel: 0px; }
+  .transaction-record-rule i { transform: none !important; }
+  .transaction-lifecycle[data-lifecycle-changing] .transaction-recorded-note { animation-name: record-content-settle !important; }
+  .transaction-lifecycle .transaction-history [data-history-fresh]::after { animation-duration: .14s; }
 }
 
 @media (forced-colors: active) {

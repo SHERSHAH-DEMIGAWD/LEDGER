@@ -1,9 +1,9 @@
-import { useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { Deal, DealEvent } from '../types/deal';
 import type { DealAction } from '../types/api';
 import { ACTION_LABELS } from '../hooks/useDealActions';
-import { DealStateBadge } from './DealStateBadge';
+import { RecordedDealState } from '../motion/TransactionLifecycle';
 import { DealTermsSummary } from './DealTermsSummary';
 import { DealTermsRefinement, type TermsRefinementProps } from './DealTermsRefinement';
 import { DealHistory } from './DealHistory';
@@ -44,9 +44,14 @@ export function DealDeliveryView({ deal, actions, checkingActions, actionsError,
   const [notes, setNotes] = useState<Partial<Record<DealAction, string>>>({});
   const lock = useRef(false);
   const noteId = useId();
+  const noteInput = useRef<HTMLTextAreaElement>(null);
+  const noteTrigger = useRef<HTMLButtonElement | null>(null);
   const current = guidance[deal.status];
   const busy = checkingActions || actionInFlight !== null || !!actionsError;
   const editor = selected && actions.includes(selected) ? noteActions[selected] : undefined;
+  useEffect(() => {
+    if (selected && editor) noteInput.current?.focus();
+  }, [selected, editor]);
 
   async function run(action: DealAction, note?: string) {
     if (lock.current || busy || !actions.includes(action)) return;
@@ -68,18 +73,24 @@ export function DealDeliveryView({ deal, actions, checkingActions, actionsError,
   }
 
   return (
-    <div className="transaction-page transaction-delivery-page">
+    <div className="transaction-page transaction-delivery-page" data-record-detail={deal.id}>
       <header className="transaction-header">
         <Link className="transaction-back" to="/deals">← All deals</Link>
         <p className="transaction-eyebrow">Delivery &amp; review</p>
         <h1 className="transaction-title">{current?.title}</h1>
         <h2 className="transaction-deal-name">{deal.title}</h2>
         <div className="transaction-actions">
-          <DealStateBadge status={deal.status} />
+          <RecordedDealState status={deal.status} />
           <button className="transaction-link" disabled={checkingActions || actionInFlight !== null} onClick={onRefresh}>Refresh status</button>
         </div>
         <p className="transaction-intro">{current?.copy}</p>
         <p className="transaction-note">Updated <time dateTime={deal.updatedAt}>{new Date(deal.updatedAt).toLocaleString()}</time></p>
+        <nav className="transaction-section-nav" aria-label="In this deal">
+          <a className="transaction-link" href="#delivery-next-action">{deal.status === 'COMPLETED' ? 'Completion' : 'Next action ↓'}</a>
+          {deal.latestRevisionNote && <a className="transaction-link" href="#delivery-latest-note">Latest note</a>}
+          <a className="transaction-link" href="#delivery-history">Record history</a>
+          <a className="transaction-link" href="#delivery-terms">Terms &amp; payment</a>
+        </nav>
       </header>
 
       <section className="transaction-section" aria-label="Current responsibility">
@@ -92,29 +103,37 @@ export function DealDeliveryView({ deal, actions, checkingActions, actionsError,
       </section>
 
       {deal.latestRevisionNote && (
-        <section className="transaction-section" aria-label="Latest revision or resolution note">
+        <section id="delivery-latest-note" tabIndex={-1} className="transaction-section" aria-label="Latest revision or resolution note">
           <p className="transaction-eyebrow">{deal.status === 'REVISION_REQUESTED' ? 'Revision request' : deal.status === 'RESOLVED' ? 'Resolution' : 'Latest revision / resolution note'}</p>
           <p className="transaction-recorded-note">{deal.latestRevisionNote}</p>
           {deal.latestRevisionNoteAt && <p className="transaction-note">Recorded {new Date(deal.latestRevisionNoteAt).toLocaleString()}</p>}
         </section>
       )}
 
-      <section className="transaction-section" aria-label="Available actions">
+      <section id="delivery-next-action" tabIndex={-1} className="transaction-section" aria-label="Available actions">
+        <h2>{deal.status === 'COMPLETED' ? 'Completion' : 'Available actions'}</h2>
         {checkingActions && <p className="transaction-note" role="status">Checking current state and actions…</p>}
         {actionsError && <p className="transaction-error" role="alert">{actionsError} <button className="transaction-link" onClick={onRefresh}>Retry status check</button></p>}
         {!checkingActions && !actionsError && actions.length === 0 && <p className="transaction-note" role="status">{deal.status === 'COMPLETED' ? 'This record is closed.' : 'No action is available for your account in the current state.'}</p>}
         <div className="transaction-actions">
           {actions.map((action) => <button key={action} type="button"
-            className={`transaction-button ${['RAISE_DISPUTE', 'REQUEST_REVISION'].includes(action) ? 'transaction-button--danger' : 'transaction-button--primary'}`}
+            className={`transaction-button ${action === 'RAISE_DISPUTE' ? 'transaction-button--danger' : ['REQUEST_REVISION', 'REQUEST_REWORK'].includes(action) ? '' : 'transaction-button--primary'}`}
             disabled={busy} aria-busy={actionInFlight === action} aria-expanded={noteActions[action] ? selected === action : undefined}
-            onClick={() => noteActions[action] ? setSelected(action) : void run(action)}>
+            aria-controls={noteActions[action] && selected === action ? `${noteId}-editor` : undefined}
+            onClick={(event) => {
+              if (noteActions[action]) {
+                noteTrigger.current = event.currentTarget;
+                setSelected(action);
+                noteInput.current?.focus();
+              } else void run(action);
+            }}>
             {actionInFlight === action ? 'Updating…' : ACTION_LABELS[action]}
           </button>)}
         </div>
-        {selected && editor && <form className="transaction-form transaction-note-editor" onSubmit={submitNote}>
+        {selected && editor && <form id={`${noteId}-editor`} className="transaction-form transaction-note-editor" onSubmit={submitNote}>
           <div className="transaction-field">
             <label htmlFor={noteId}>{editor.label}{!editor.required && ' (optional)'}</label>
-            <textarea id={noteId} rows={5} maxLength={5000} required={editor.required} disabled={busy}
+            <textarea ref={noteInput} id={noteId} rows={5} maxLength={5000} required={editor.required} disabled={busy}
               aria-describedby={`${noteId}-help`} value={notes[selected] ?? ''}
               onChange={(event) => setNotes((previous) => ({ ...previous, [selected]: event.target.value }))} />
             <span id={`${noteId}-help`} className="transaction-field-hint">{editor.help} Up to 5,000 characters.</span>
@@ -123,17 +142,17 @@ export function DealDeliveryView({ deal, actions, checkingActions, actionsError,
             <button className="transaction-button transaction-button--primary" type="submit" disabled={busy || (editor.required && !(notes[selected] ?? '').trim())}>
               {actionInFlight === selected ? 'Recording…' : `Record ${editor.label.toLowerCase()}`}
             </button>
-            <button className="transaction-link" type="button" disabled={actionInFlight !== null} onClick={() => setSelected(null)}>Close note</button>
+            <button className="transaction-link" type="button" disabled={actionInFlight !== null} onClick={() => { setSelected(null); noteTrigger.current?.focus(); }}>Close note</button>
           </div>
         </form>}
       </section>
 
-      <section className="transaction-section" aria-labelledby="delivery-record-heading">
+      <section id="delivery-history" tabIndex={-1} className="transaction-section" aria-labelledby="delivery-record-heading">
         <h2 id="delivery-record-heading">Submission &amp; review record</h2>
         <DealHistory events={events} error={historyError} onRefresh={onRefresh} />
       </section>
 
-      <section className="transaction-section" aria-labelledby="delivery-terms-heading">
+      <section id="delivery-terms" tabIndex={-1} className="transaction-section" aria-labelledby="delivery-terms-heading">
         <p className="transaction-eyebrow">Agreed terms · Version {deal.termsVersionNumber}</p>
         <h2 id="delivery-terms-heading">Scope &amp; payment</h2>
         <p className="transaction-note">{deal.fundingStatus === 'FUNDED' ? 'Funding confirmed' : 'Funding not confirmed'} · {deal.amountFormatted}</p>

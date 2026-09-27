@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { DealDetailSkeleton, ErrorState, EmptyState } from '../components/DealStateViews';
 import { DealEntryView } from '../components/DealEntryView';
 import { DealDeliveryView } from '../components/DealDeliveryView';
+import { TransactionLifecycle } from '../motion/TransactionLifecycle';
 import type { TermsAction } from '../components/DealTermsRefinement';
 import { useDeal } from '../hooks/useDeal';
 import { useDealActions } from '../hooks/useDealActions';
@@ -150,8 +151,10 @@ export function DealDetailPage() {
         <button type="button" className="transaction-link" onClick={() => setToasts((items) => items.filter((item) => item.id !== toast.id))}>Dismiss</button>
       </div>)}
     </div>
-    {ENTRY_STATUSES.includes(deal.status)
-      ? <DealEntryView key={deal.id} {...shared} onAction={handleAction} onNotice={addToast} />
-      : <DealDeliveryView key={deal.id} {...shared} onAction={handleAction} />}
+    <TransactionLifecycle key={`${user?.id}:${user?.role}:${deal.id}`} deal={deal} events={historyEvents}>
+      {ENTRY_STATUSES.includes(deal.status)
+        ? <DealEntryView key={deal.id} {...shared} onAction={handleAction} onNotice={addToast} />
+        : <DealDeliveryView key={deal.id} {...shared} onAction={handleAction} />}
+    </TransactionLifecycle>
   </>;
 }

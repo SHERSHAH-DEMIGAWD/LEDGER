@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { dealApi } from '../services/dealApi';
-import { DealStateBadge } from './DealStateBadge';
+import { RecordedDealState } from '../motion/TransactionLifecycle';
 import { DealTermsSummary } from './DealTermsSummary';
 import { DealTermsRefinement, type TermsRefinementProps } from './DealTermsRefinement';
 import { DealHistory } from './DealHistory';
@@ -80,17 +80,23 @@ export function DealEntryView({ deal, actions, checkingActions, actionsError, ac
   };
 
   return (
-    <div className="transaction-page">
+    <div className="transaction-page" data-record-detail={deal.id}>
       <header className="transaction-header">
         <Link className="transaction-back" to="/deals">← All deals</Link>
         <p className="transaction-eyebrow">{deal.status === 'FUNDED' ? 'Funded agreement' : 'Agreement on record'}</p>
         <h1 className="transaction-title">{deal.title}</h1>
         <div className="transaction-actions">
-          <DealStateBadge status={deal.status} />
+          <RecordedDealState status={deal.status} />
           <button className="transaction-link" onClick={onRefresh} disabled={busy}>Refresh status</button>
         </div>
         <p className="transaction-intro" role="status">{guidance[deal.status]}</p>
         <p className="transaction-note">Created <time dateTime={deal.createdAt}>{new Date(deal.createdAt).toLocaleDateString()}</time> · Updated <time dateTime={deal.updatedAt}>{new Date(deal.updatedAt).toLocaleString()}</time></p>
+        <nav className="transaction-section-nav" aria-label="In this deal">
+          <a className="transaction-link" href="#entry-terms">Terms &amp; payment</a>
+          {!['DECLINED', 'CANCELLED'].includes(deal.status) && <a className="transaction-link" href="#entry-next-action">Next action ↓</a>}
+          {deal.pendingTerms && <a className="transaction-link" href="#terms-refinement">Proposed changes</a>}
+          <a className="transaction-link" href="#entry-history">Record history</a>
+        </nav>
       </header>
 
       <section className="transaction-section" aria-label="Deal participants">
@@ -116,18 +122,17 @@ export function DealEntryView({ deal, actions, checkingActions, actionsError, ac
         </section>
       )}
 
-      <section className="transaction-section" aria-labelledby="deal-terms-heading">
+      <section id="entry-terms" tabIndex={-1} className="transaction-section" aria-labelledby="deal-terms-heading">
         <p className="transaction-eyebrow">Version {deal.termsVersionNumber} · {['DRAFT', 'PENDING_ACCEPTANCE', 'DECLINED', 'CANCELLED'].includes(deal.status) ? 'Invitation terms' : 'Agreed terms'}</p>
         <h2 id="deal-terms-heading">Scope &amp; payment</h2>
         <DealTermsSummary terms={deal.terms} />
       </section>
 
-      <DealTermsRefinement key={`${deal.id}:${deal.termsVersionNumber}`} deal={deal} disabled={busy} termsActionInFlight={termsActionInFlight} onTermsAction={onTermsAction} />
-
-      <section className="transaction-section" aria-label="Next action">
+      <section id="entry-next-action" tabIndex={-1} className="transaction-section" aria-label="Next action">
+        {!['ACCEPTED', 'FUNDED'].includes(deal.status) && <h2>{['DECLINED', 'CANCELLED'].includes(deal.status) ? 'Closed agreement' : 'Next action'}</h2>}
         {['ACCEPTED', 'FUNDED'].includes(deal.status) && <>
           <h2>Funding &amp; next step</h2>
-          <p className="transaction-note">{deal.fundingStatus === 'FUNDED' ? 'Funding confirmed' : 'Awaiting funding'} · Agreed amount: {deal.amountFormatted}{deal.paymentStatus === 'PENDING' ? ' · Payment awaiting confirmation' : ''}</p>
+          <p className="transaction-note transaction-funding-result">{deal.fundingStatus === 'FUNDED' ? 'Funding confirmed' : 'Awaiting funding'} · Agreed amount: <span className="transaction-funded-amount">{deal.amountFormatted}</span>{deal.paymentStatus === 'PENDING' ? ' · Payment awaiting confirmation' : ''}</p>
           <p className="transaction-note">Payments are simulated in this MVP. Funding records the payment status without charging real money.</p>
         </>}
         {actionsError && <p className="transaction-error" role="alert">{actionsError} <button className="transaction-link" onClick={onRefresh}>Retry status check</button></p>}
@@ -144,7 +149,9 @@ export function DealEntryView({ deal, actions, checkingActions, actionsError, ac
         {deal.status === 'PENDING_ACCEPTANCE' && user?.role === 'CREATOR' && <p className="transaction-note">Declining closes this deal. Accepting records your agreement to the invitation terms above.</p>}
       </section>
 
-      <section className="transaction-section" aria-labelledby="entry-history-heading">
+      <DealTermsRefinement key={`${deal.id}:${deal.termsVersionNumber}`} deal={deal} disabled={busy} termsActionInFlight={termsActionInFlight} onTermsAction={onTermsAction} />
+
+      <section id="entry-history" tabIndex={-1} className="transaction-section" aria-labelledby="entry-history-heading">
         <h2 id="entry-history-heading">Record history</h2>
         <DealHistory events={events} error={historyError} onRefresh={onRefresh} />
       </section>

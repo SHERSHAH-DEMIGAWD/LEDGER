@@ -29,7 +29,7 @@ export function DealTermsRefinement({ deal, disabled, termsActionInFlight, onTer
     if (await onTermsAction('propose', terms)) setEditing(false);
   }
 
-  return <section className="transaction-section" aria-label="Terms refinement">
+  return <section id="terms-refinement" tabIndex={-1} className="transaction-section" aria-label="Terms refinement">
     {deal.pendingTerms ? <>
       <p className="transaction-eyebrow">Awaiting creator agreement · Version {deal.pendingTermsVersionNumber}</p>
       <h2>Proposed changes</h2>

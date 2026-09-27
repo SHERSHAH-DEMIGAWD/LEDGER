@@ -16,9 +16,10 @@
  */ 
 
 import { type ReactNode } from 'react'; 
-import { NavLink } from 'react-router-dom'; 
-import { motion } from 'motion/react'; 
-import { useReducedMotion } from '../motion/hooks'; 
+import { NavLink, useLocation } from 'react-router-dom';
+import { LayoutGroup, motion } from 'motion/react';
+import { useMediaPreference } from '../motion/useMediaPreference';
+import { routeEase } from '../motion/routeMotion';
 import { duration } from '../motion/variants'; 
 import { UserSwitcher } from './UserSwitcher';
 import { useAuth } from '../contexts/AuthContext';
@@ -49,11 +50,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="ledger-topbar"> 
         <NavBrand /> 
  
-        <nav className="ledger-topnav" aria-label="Primary navigation"> 
-          {navigation.map((item) => (
-            <TopNavItem key={item.to} item={item} /> 
-          ))} 
-        </nav> 
+        <LayoutGroup id="ledger-navigation">
+          <nav className="ledger-topnav" aria-label="Primary navigation">
+            {navigation.map((item) => (
+              <TopNavItem key={item.to} item={item} />
+            ))}
+          </nav>
+        </LayoutGroup>
  
         <div className="ledger-topbar-right"> 
           <UserSwitcher />
@@ -106,12 +109,15 @@ function NavBrand() {
 } 
 
 function TopNavItem({ item }: { item: NavItem }) { 
-  const reduced = useReducedMotion(); 
+  const reduced = useMediaPreference('(prefers-reduced-motion: reduce)');
+  const { pathname } = useLocation();
+  // A transaction belongs to the Deals section, including on direct entry.
+  const inDeals = item.to === '/deals' && pathname.startsWith('/deals/') && pathname !== '/deals/new';
  
   return ( 
     <NavLink 
       to={item.to} 
-      end={item.end} 
+      end={inDeals ? false : item.end}
       className={({ isActive }) => 
         `ledger-topnav-item${isActive ? ' is-active' : ''}` 
       } 
@@ -123,7 +129,13 @@ function TopNavItem({ item }: { item: NavItem }) {
           className="ledger-topnav-label" 
         > 
           {item.label} 
-          {isActive && <span className="ledger-nav-dot" />} 
+          {isActive && <motion.span
+            className="ledger-nav-indicator"
+            layoutId={reduced ? undefined : 'active-section'}
+            initial={false}
+            transition={{ duration: reduced ? 0 : 0.38, ease: routeEase }}
+            aria-hidden="true"
+          />}
         </motion.span> 
       )} 
     </NavLink> 
