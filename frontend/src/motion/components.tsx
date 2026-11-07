@@ -379,7 +379,7 @@ export function Modal({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.55)',
+            background: 'var(--color-surface-scrim)',
             zIndex: 50,
             display: 'flex',
             alignItems: 'center',
@@ -403,7 +403,7 @@ export function Modal({
             onClick={(e) => e.stopPropagation()}
             className={className}
             style={{
-              background: 'var(--color-surface-1)',
+              background: 'var(--color-surface-floating)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-md)',
               boxShadow: 'var(--shadow-xl)',
@@ -471,7 +471,7 @@ export function Drawer({
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.55)',
+            background: 'var(--color-surface-scrim)',
             zIndex: 50,
           }}
         >
@@ -495,7 +495,7 @@ export function Drawer({
               bottom: 0,
               [side]: 0,
               width: 'min(420px, 100%)',
-              background: 'var(--color-surface-1)',
+              background: 'var(--color-surface-floating)',
               border: '1px solid var(--color-border)',
               boxShadow: 'var(--shadow-xl)',
               display: 'flex',

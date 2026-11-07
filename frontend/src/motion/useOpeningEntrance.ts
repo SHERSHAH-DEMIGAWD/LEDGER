@@ -114,10 +114,6 @@ export function useOpeningEntrance(background: RefObject<HTMLDivElement>) {
       reveal('.login-page__foot, .auth-personas, .auth-caption', 1.08, 0.44);
       // Verification/status content and an already signed-in shell keep their layout.
       reveal('.login-page__panel > :not(.login-page__head, .login-page__register, .login-page__foot, .auth-personas), .ledger-app-shell', 0.56, 0.6);
-      for (const panel of root.querySelectorAll<HTMLElement>('.login-page__panel')) {
-        remember(panel, ['--opening-lane']);
-        sequence.push([panel, { '--opening-lane': [0, 1] }, { at: reduced.matches ? 0 : 0.38, duration: reduced.matches ? 0.16 : 0.7 }]);
-      }
       root.dataset.ledgerEntrance = 'running';
       controls = animate(sequence);
       // Include readiness/guard time in the budget, even on a protected entry URL.
